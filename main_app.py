@@ -149,9 +149,7 @@ def main():
     # Titre principal
     st.title("🔍 Explorateur API Ratings & Reviews")
     st.markdown("**Suite complète d'exploration et d'export de données reviews**")
-    
-    # Affichage des quotas en header
-    display_quotas_overview()
+
     
     # Navigation
     if not modules_available:
