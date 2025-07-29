@@ -107,6 +107,7 @@ def display_bulk_volume_estimation():
     brands = filters.get("brand", [])
     
     if not brands:
+        st.warning("⚠️ Aucune marque sélectionnée")
         return
     
     st.markdown("### 📊 Estimation du volume bulk")
@@ -138,11 +139,18 @@ def display_bulk_volume_estimation():
                             brand_details = []
                             
                             for brand in brands:
+                                # Paramètres spécifiques à chaque marque
                                 brand_params = build_filter_params(filters)
-                                brand_params["brand"] = brand  # Une seule marque
+                                # Remplacer la liste de marques par une seule marque
+                                brand_params["brand"] = brand
                                 
-                                brand_metrics = api_client.get_metrics(**brand_params)
-                                brand_count = brand_metrics.get("nbDocs", 0) if brand_metrics else 0
+                                try:
+                                    brand_metrics = api_client.get_metrics(**brand_params)
+                                    brand_count = brand_metrics.get("nbDocs", 0) if brand_metrics else 0
+                                except Exception as e:
+                                    st.warning(f"Erreur pour la marque {brand}: {e}")
+                                    brand_count = 0
+                                
                                 brand_details.append({
                                     "Marque": brand,
                                     "Reviews": brand_count
@@ -159,11 +167,17 @@ def display_bulk_volume_estimation():
                                 if abs(sum_individual - total_reviews) > total_reviews * 0.1:  # 10% de différence
                                     st.warning(f"⚠️ Différence détectée : Total groupé ({total_reviews:,}) ≠ Somme individuelle ({sum_individual:,})")
                                     st.info("💡 Cela peut être normal si des reviews mentionnent plusieurs marques")
+                                else:
+                                    st.success("✅ Cohérence vérifiée entre le total groupé et la somme individuelle")
                     
                     # Stocker pour l'interface d'export
                     st.session_state.estimated_bulk_volume = total_reviews
                 else:
-                    st.error("❌ Impossible d'obtenir les métriques")
+                    st.error("❌ Impossible d'obtenir les métriques globales")
+            except Exception as e:
+                st.error(f"❌ Erreur lors du calcul : {e}")
+                st.write(f"🔍 Debug: Filtres = {filters}")
+                st.write(f"🔍 Debug: Paramètres = {build_filter_params(filters) if filters else 'Aucun'}")
             except Exception as e:
                 st.error(f"❌ Erreur lors du calcul : {e}")
 
