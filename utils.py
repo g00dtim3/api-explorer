@@ -7,6 +7,14 @@ import datetime
 import json
 import ast
 from pathlib import Path
+import io
+
+# Vérification des dépendances optionnelles
+try:
+    import openpyxl
+    EXCEL_AVAILABLE = True
+except ImportError:
+    EXCEL_AVAILABLE = False
 
 
 def initialize_session_state():
@@ -390,7 +398,130 @@ def display_quotas():
             st.metric("Valable jusqu'au", result.get('end date', 'N/A'))
 
 
+def create_excel_download(df, sheet_name='Data'):
+    """Crée un fichier Excel pour téléchargement (avec gestion d'erreur)"""
+    if not EXCEL_AVAILABLE:
+        st.warning("⚠️ openpyxl non installé. Export Excel non disponible.")
+        return None
+    
+    try:
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+        return excel_buffer.getvalue()
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la création du fichier Excel : {e}")
+        return None
+
+
+def display_download_buttons(df, filename_base, mode="page", page=None):
+    """Affiche les boutons de téléchargement avec gestion des erreurs"""
+    
+    # Génération des noms de fichiers
+    csv_filename = f"{filename_base}_{mode}.csv"
+    excel_filename = f"{filename_base}_{mode}.xlsx"
+    
+    if page is not None:
+        csv_filename = f"{filename_base}_page{page}.csv"
+        excel_filename = f"{filename_base}_page{page}.xlsx"
+    
+    # Colonnes pour les boutons
+    if EXCEL_AVAILABLE:
+        col1, col2, col3 = st.columns(3)
+    else:
+        col1, col2 = st.columns(2)
+    
+    # CSV (toujours disponible)
+    with col1:
+        csv_data = df.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            "📂 Télécharger CSV",
+            csv_data,
+            file_name=csv_filename,
+            mime="text/csv"
+        )
+    
+    # Excel (conditionnel)
+    if EXCEL_AVAILABLE:
+        with col2:
+            excel_data = create_excel_download(df)
+            if excel_data:
+                st.download_button(
+                    "📄 Télécharger Excel",
+                    excel_data,
+                    file_name=excel_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        
+        # Format plat
+        with col3:
+            try:
+                df_flat = postprocess_reviews(df.copy())
+                flat_csv = df_flat.to_csv(index=False, sep=';', encoding='utf-8-sig')
+                flat_filename = f"{filename_base}_{mode}_plat.csv"
+                if page is not None:
+                    flat_filename = f"{filename_base}_page{page}_plat.csv"
+                
+                st.download_button(
+                    "📃 Format plat",
+                    flat_csv,
+                    file_name=flat_filename,
+                    mime="text/csv"
+                )
+            except Exception as e:
+                st.warning(f"Erreur format plat : {e}")
+    else:
+        # Si Excel pas disponible, mettre le format plat à la place
+        with col2:
+            try:
+                df_flat = postprocess_reviews(df.copy())
+                flat_csv = df_flat.to_csv(index=False, sep=';', encoding='utf-8-sig')
+                flat_filename = f"{filename_base}_{mode}_plat.csv"
+                if page is not None:
+                    flat_filename = f"{filename_base}_page{page}_plat.csv"
+                
+                st.download_button(
+                    "📃 Format plat",
+                    flat_csv,
+                    file_name=flat_filename,
+                    mime="text/csv"
+                )
+            except Exception as e:
+                st.warning(f"Erreur format plat : {e}")
+
+
 def log_export_activity(export_params, nb_reviews, export_type="STANDARD"):
+    """Enregistre l'activité d'export dans un fichier log"""
+    try:
+        log_path = Path("review_exports_log.csv")
+        export_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        log_entry = {
+            "product": export_params.get("product", "BULK_EXPORT" if export_type == "BULK" else ""),
+            "brand": export_params.get("brand", ""),
+            "start_date": export_params.get("start-date"),
+            "end_date": export_params.get("end-date"),
+            "country": export_params.get("country", "Tous"),
+            "rows": export_params.get("rows", 100),
+            "random_seed": export_params.get("random", None),
+            "nb_reviews": nb_reviews,
+            "export_timestamp": export_date,
+            "export_type": export_type
+        }
+        
+        new_log_df = pd.DataFrame([log_entry])
+        
+        if log_path.exists():
+            existing_log_df = pd.read_csv(log_path)
+            log_df = pd.concat([existing_log_df, new_log_df], ignore_index=True)
+        else:
+            log_df = new_log_df
+        
+        log_df.to_csv(log_path, index=False)
+        st.success(f"📝 Export {export_type} enregistré dans le journal")
+        
+    except Exception as e:
+        st.warning(f"⚠️ Erreur lors de l'enregistrement du log : {str(e)}")
     """Enregistre l'activité d'export dans un fichier log"""
     try:
         log_path = Path("review_exports_log.csv")
