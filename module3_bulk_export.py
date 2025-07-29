@@ -16,7 +16,10 @@ from utils import (
     generate_export_filename,
     postprocess_reviews,
     display_quotas,
-    log_export_activity
+    log_export_activity,
+    create_excel_download,
+    display_download_buttons,
+    display_excel_warning
 )
 
 
@@ -482,60 +485,18 @@ def display_bulk_export_results():
 
 def display_bulk_download_interface(all_docs, df_page, current_page):
     """Interface de téléchargement des résultats bulk"""
-    export_params = st.session_state.get("export_params", {})
     is_preview = st.session_state.get("is_preview_mode", False)
     
     st.markdown("### 💾 Téléchargements bulk")
     
+    # Avertissement Excel si nécessaire
+    display_excel_warning()
+    
     # Téléchargement de la page courante
     st.markdown("#### 📄 Page courante")
     
-    col1, col2, col3 = st.columns(3)
-    
-    # CSV page
-    with col1:
-        page_csv = df_page.to_csv(index=False, encoding="utf-8-sig")
-        page_csv_filename = generate_export_filename(export_params, mode="page", page=current_page, extension="csv")
-        # Ajouter "bulk" dans le nom
-        page_csv_filename = page_csv_filename.replace("reviews_", "reviews_bulk_")
-        st.download_button(
-            "📂 CSV (page bulk)",
-            page_csv,
-            file_name=page_csv_filename,
-            mime="text/csv"
-        )
-    
-    # Excel page
-    with col2:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_page.to_excel(writer, index=False, sheet_name='Reviews_Bulk')
-        excel_data = excel_buffer.getvalue()
-        
-        page_excel_filename = generate_export_filename(export_params, mode="page", page=current_page, extension="xlsx")
-        page_excel_filename = page_excel_filename.replace("reviews_", "reviews_bulk_")
-        st.download_button(
-            "📄 Excel (page bulk)",
-            excel_data,
-            file_name=page_excel_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    
-    # Format plat page
-    with col3:
-        try:
-            df_flat_page = postprocess_reviews(df_page.copy())
-            flat_csv_page = df_flat_page.to_csv(index=False, sep=';', encoding='utf-8-sig')
-            flat_page_filename = generate_export_filename(export_params, mode="page", page=current_page, extension="plat.csv")
-            flat_page_filename = flat_page_filename.replace("reviews_", "reviews_bulk_")
-            st.download_button(
-                "📃 Format plat (page bulk)",
-                flat_csv_page,
-                file_name=flat_page_filename,
-                mime="text/csv"
-            )
-        except Exception as e:
-            st.warning(f"Erreur format plat : {e}")
+    page_filename_base = f"reviews_bulk_page{current_page}"
+    display_download_buttons(df_page, page_filename_base, mode="page", page=current_page)
     
     # Téléchargement complet bulk
     st.markdown("#### 📦 Export bulk complet")
@@ -547,63 +508,8 @@ def display_bulk_download_interface(all_docs, df_page, current_page):
     # Informations sur le dataset complet
     st.info(f"📊 Dataset complet : {len(all_docs):,} reviews, {df_full.shape[1]} colonnes")
     
-    col1, col2, col3 = st.columns(3)
-    
-    # CSV complet
-    with col1:
-        full_csv = df_full.to_csv(index=False, encoding="utf-8-sig")
-        full_csv_filename = generate_export_filename(
-            export_params, 
-            mode="preview" if is_preview else "complete", 
-            extension="csv"
-        )
-        full_csv_filename = full_csv_filename.replace("reviews_", "reviews_bulk_")
-        st.download_button(
-            f"📂 CSV bulk {'(aperçu)' if is_preview else '(complet)'}",
-            full_csv,
-            file_name=full_csv_filename,
-            mime="text/csv"
-        )
-    
-    # Excel complet
-    with col2:
-        excel_buffer_full = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer_full, engine='openpyxl') as writer:
-            df_full.to_excel(writer, index=False, sheet_name='Reviews_Bulk')
-        excel_data_full = excel_buffer_full.getvalue()
-        
-        full_excel_filename = generate_export_filename(
-            export_params, 
-            mode="preview" if is_preview else "complete", 
-            extension="xlsx"
-        )
-        full_excel_filename = full_excel_filename.replace("reviews_", "reviews_bulk_")
-        st.download_button(
-            f"📄 Excel bulk {'(aperçu)' if is_preview else '(complet)'}",
-            excel_data_full,
-            file_name=full_excel_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    
-    # Format plat complet
-    with col3:
-        try:
-            df_flat_full = postprocess_reviews(df_full.copy())
-            flat_csv_full = df_flat_full.to_csv(index=False, sep=';', encoding='utf-8-sig')
-            flat_full_filename = generate_export_filename(
-                export_params, 
-                mode="preview" if is_preview else "complete", 
-                extension="plat.csv"
-            )
-            flat_full_filename = flat_full_filename.replace("reviews_", "reviews_bulk_")
-            st.download_button(
-                f"📃 Format plat bulk {'(aperçu)' if is_preview else '(complet)'}",
-                flat_csv_full,
-                file_name=flat_full_filename,
-                mime="text/csv"
-            )
-        except Exception as e:
-            st.warning(f"Erreur format plat : {e}")
+    full_filename_base = f"reviews_bulk_{'apercu' if is_preview else 'complet'}"
+    display_download_buttons(df_full, full_filename_base, mode="bulk_complet")
 
 
 def display_bulk_analytics():
