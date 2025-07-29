@@ -383,11 +383,14 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
         status_text = st.empty()
         progress_bar = None if is_preview else st.progress(0)
         
-        # Variables de pagination
-        cursor_mark = "*"
+        # Variables de pagination - CORRECTION PRINCIPALE
+        cursor_mark = "*"  # Toujours commencer par "*"
         page_count = 0
         all_docs = []
-        max_iterations = 1000 if not is_preview else 1
+        max_iterations = 1000 if not is_preview else 10  # Limite de sécurité
+        
+        # Debug initial
+        st.write(f"🔍 Debug bulk: Démarrage avec cursorMark='*', rows={bulk_params['rows']}")
         
         # Boucle d'export bulk
         while page_count < max_iterations:
@@ -396,9 +399,13 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             current_count = len(all_docs)
             status_text.text(f"📥 Page {page_count} | Récupéré: {current_count:,}/{total_available:,} reviews (bulk)")
             
-            # Paramètres avec cursor
+            # Paramètres avec cursor - CORRECTION CRITIQUE
             current_params = bulk_params.copy()
             current_params["cursorMark"] = cursor_mark
+            
+            # Debug des paramètres pour les premières pages
+            if page_count <= 3:
+                st.write(f"🔍 Bulk page {page_count}: cursor='{cursor_mark}', rows={current_params['rows']}")
             
             # Appel API
             result = api_client.get_reviews(**current_params)
@@ -412,41 +419,66 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
                 break
             
             docs = result.get("docs", [])
-            all_docs.extend(docs)
+            
+            # CORRECTION PRINCIPALE: Vérifier les doublons en mode DEV
+            docs_before = len(all_docs)
+            
+            # En mode développement, vérifier les IDs pour éviter les doublons
+            if all_docs and len(docs) > 0 and 'id' in docs[0]:
+                existing_ids = {doc.get('id') for doc in all_docs if doc.get('id')}
+                new_docs = [doc for doc in docs if doc.get('id') not in existing_ids]
+                
+                if len(new_docs) < len(docs):
+                    duplicates_found = len(docs) - len(new_docs)
+                    st.warning(f"⚠️ {duplicates_found} doublons détectés et ignorés à la page {page_count}")
+                
+                all_docs.extend(new_docs)
+            else:
+                all_docs.extend(docs)
+            
+            docs_after = len(all_docs)
+            
+            # Affichage du progrès détaillé
+            st.write(f"📊 Bulk page {page_count}: +{len(docs)} reçus, +{docs_after - docs_before} ajoutés (Total: {docs_after:,})")
             
             # Mise à jour progression
             if progress_bar is not None:
                 progress_percent = min(len(all_docs) / total_available, 1.0)
                 progress_bar.progress(progress_percent)
             
-            # En mode aperçu, on s'arrête après la première page
-            if is_preview:
+            # En mode aperçu, on s'arrête après avoir assez de reviews
+            if is_preview and len(all_docs) >= 100:
+                st.info("🔍 Limite aperçu bulk atteinte")
                 break
             
-            # Gestion du cursor
+            # Gestion du cursor - CORRECTION CRITIQUE
             next_cursor = result.get("nextCursorMark")
             
-            # Conditions d'arrêt
+            # Debug du cursor pour les premières pages
+            if page_count <= 3:
+                st.write(f"🔍 Bulk cursor reçu: '{next_cursor}'")
+                st.write(f"🔍 Bulk cursor actuel: '{cursor_mark}'")
+                st.write(f"🔍 Bulk cursor identique: {next_cursor == cursor_mark}")
+            
+            # CONDITIONS D'ARRÊT
             if not next_cursor:
-                st.info(f"🏁 Fin de pagination bulk: pas de cursor suivant")
+                st.info(f"🏁 Fin bulk: Pas de nextCursorMark")
                 break
             
             if next_cursor == cursor_mark:
-                st.info(f"🏁 Fin de pagination bulk: cursor identique")
+                st.info(f"🏁 Fin bulk: Cursor identique ('{cursor_mark}')")
                 break
             
-            if len(all_docs) >= total_available:
-                st.info(f"🏁 Toutes les reviews récupérées en bulk ({len(all_docs):,})")
-                break
-            
+            # MISE À JOUR DU CURSOR - POINT CRITIQUE
             cursor_mark = next_cursor
             
-            # Limite aperçu
-            if is_preview and len(all_docs) >= 100:
+            # Conditions d'arrêt supplémentaires
+            if len(all_docs) >= total_available:
+                st.info(f"🏁 Toutes les reviews bulk récupérées ({len(all_docs):,})")
                 break
             
             # Pause entre requêtes pour éviter les limites
-            if page_count % 10 == 0:
+            if page_count % 5 == 0:
                 time.sleep(0.1)
         
         # Stocker les résultats
@@ -462,7 +494,9 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             
             # Avertissement si pas toutes les reviews en mode complet
             if len(all_docs) < total_available and not is_preview:
-                st.warning(f"⚠️ Attention: {total_available - len(all_docs):,} reviews manquantes")
+                missing_reviews = total_available - len(all_docs)
+                st.warning(f"⚠️ Attention: {missing_reviews:,} reviews manquantes")
+                st.info("💡 Cela peut être dû aux limites de pagination en environnement DEV")
             
             st.balloons()  # Célébration pour les gros exports !
             
@@ -475,7 +509,7 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
     
     except Exception as e:
         st.error(f"❌ Erreur lors de l'export bulk : {str(e)}")
-        st.write(f"🔍 Debug: Page {page_count}, Reviews récupérées: {len(all_docs) if 'all_docs' in locals() else 0}")
+        st.write(f"🔍 Debug: Page {page_count if 'page_count' in locals() else 0}, Reviews récupérées: {len(all_docs) if 'all_docs' in locals() else 0}")
     
     finally:
         # Toujours libérer le verrou
