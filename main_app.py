@@ -3,7 +3,7 @@ Application principale - Explorateur API Ratings & Reviews
 Point d'entrée avec navigation entre les 3 modules
 """
 import streamlit as st
-from utils import initialize_session_state, display_quotas
+from utils import initialize_session_state, display_quotas, display_export_journal
 
 # Import des modules
 try:
@@ -26,7 +26,8 @@ def display_navigation():
         [
             "🔍 Module 1 - Explorateur API",
             "🎯 Module 2 - Export Manuel", 
-            "🚀 Module 3 - Export Bulk"
+            "🚀 Module 3 - Export Bulk",
+            "📋 Journal des exports"
         ],
         help="Sélectionnez le module à utiliser"
     )
@@ -38,7 +39,7 @@ def display_module_descriptions():
     """Affiche les descriptions détaillées des modules"""
     st.header("📚 Guide des modules")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.markdown("""
@@ -90,6 +91,24 @@ def display_module_descriptions():
         
         **Idéal pour :** Analyses sectorielles et concurrentielles
         """)
+    
+    with col4:
+        st.markdown("""
+        ### 📋 Journal des exports
+        
+        **Objectif :** Suivi et historique des activités
+        
+        **Fonctionnalités :**
+        - 📊 Historique complet des exports
+        - 🔍 Filtrage par type, date, marque
+        - 📈 Statistiques et analyses
+        - 💾 Export du journal
+        - 🗑️ Nettoyage automatique
+        - 📋 Audit des activités
+        
+        **Idéal pour :** Monitoring et audit
+        """)
+    
 
 
 def display_workflow_guide():
@@ -149,7 +168,9 @@ def main():
     # Titre principal
     st.title("🔍 Explorateur API Ratings & Reviews")
     st.markdown("**Suite complète d'exploration et d'export de données reviews**")
-
+    
+    # Affichage des quotas en header
+    display_quotas_overview()
     
     # Navigation
     if not modules_available:
@@ -170,6 +191,10 @@ def main():
     elif "Module 3" in module_choice:
         st.markdown("---")
         module3_bulk_export.main()
+        
+    elif "Journal des exports" in module_choice:
+        st.markdown("---")
+        display_export_journal()
     
     # Page d'accueil si aucun module spécifique
     else:
