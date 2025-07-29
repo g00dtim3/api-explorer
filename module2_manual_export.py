@@ -224,13 +224,35 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
         if use_random and random_seed:
             export_params["random"] = str(random_seed)
         
-        # Obtenir le volume total
-        metrics = api_client.get_metrics(**build_filter_params(filters, include_product_list=True))
+        # DIAGNOSTIC: Vérifier les métriques avant l'export
+        st.markdown("### 🔍 Diagnostic des métriques")
+        
+        # Métriques sans limite de rows
+        metrics_params = build_filter_params(filters, include_product_list=True)
+        metrics = api_client.get_metrics(**metrics_params)
         total_available = metrics.get("nbDocs", 0) if metrics else 0
+        
+        st.write(f"**Métriques API :** {total_available} reviews attendues")
+        st.write(f"**Paramètres métriques :** {metrics_params}")
+        
+        # Test avec rows=1 pour voir si la pagination fonctionne
+        test_params = export_params.copy()
+        test_params["rows"] = 1
+        test_params["cursorMark"] = "*"
+        
+        st.write("**Test pagination avec rows=1 :**")
+        test_result = api_client.get_reviews(**test_params)
+        if test_result:
+            st.write(f"- Docs reçus: {len(test_result.get('docs', []))}")
+            st.write(f"- NextCursor: {test_result.get('nextCursorMark', 'None')}")
+            st.write(f"- Cursor différent: {test_result.get('nextCursorMark') != '*'}")
         
         if total_available == 0:
             st.warning("❌ Aucune review disponible pour cette sélection")
             return
+        
+        # DIAGNOSTIC: Afficher tous les paramètres d'export
+        st.write(f"**Paramètres d'export complets :** {export_params}")
         
         # Configuration selon le mode
         if is_preview:
@@ -245,11 +267,11 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
         status_text = st.empty()
         progress_bar = None if is_preview else st.progress(0)
         
-        # Variables de pagination - CORRECTION PRINCIPALE
-        cursor_mark = "*"  # Toujours commencer par "*"
+        # Variables de pagination
+        cursor_mark = "*"
         page_count = 0
         all_docs = []
-        max_iterations = 1000 if not is_preview else 10  # Limite de sécurité
+        max_iterations = 20 if not is_preview else 10  # Augmenter la limite pour diagnostic
         
         # Debug initial
         st.write(f"🔍 Debug: Démarrage avec cursorMark='*', rows={export_params['rows']}")
@@ -261,27 +283,39 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             current_count = len(all_docs)
             status_text.text(f"📥 Page {page_count} | Récupéré: {current_count:,}/{total_available:,} reviews")
             
-            # Paramètres avec cursor - CORRECTION CRITIQUE
+            # Paramètres avec cursor
             current_params = export_params.copy()
             current_params["cursorMark"] = cursor_mark
             
             # Debug des paramètres
-            if page_count <= 3:
-                st.write(f"🔍 Page {page_count}: cursor='{cursor_mark}', rows={current_params['rows']}")
+            st.write(f"🔍 Page {page_count}: cursor='{cursor_mark}', rows={current_params['rows']}")
+            st.write(f"🔍 Paramètres complets page {page_count}: {current_params}")
             
             # Appel API
             result = api_client.get_reviews(**current_params)
             
-            if not result or not result.get("docs"):
-                st.warning(f"⚠️ Pas de données à la page {page_count}")
+            if not result:
+                st.error(f"❌ Pas de résultat API à la page {page_count}")
+                break
+                
+            if not result.get("docs"):
+                st.warning(f"⚠️ Pas de docs dans le résultat à la page {page_count}")
+                st.write(f"🔍 Résultat complet: {result}")
                 break
             
             docs = result.get("docs", [])
             
-            # CORRECTION PRINCIPALE: Vérifier les doublons
+            # DIAGNOSTIC: Analyser les docs reçus
+            st.write(f"🔍 Docs reçus page {page_count}:")
+            if docs:
+                # Afficher les IDs des premières reviews pour diagnostic
+                sample_ids = [doc.get('id', 'NO_ID')[:10] for doc in docs[:3]]
+                st.write(f"- Échantillon IDs: {sample_ids}")
+                st.write(f"- Premier doc clés: {list(docs[0].keys())[:10]}")
+            
+            # Vérifier les doublons
             docs_before = len(all_docs)
             
-            # En mode développement, vérifier les IDs pour éviter les doublons
             if all_docs and 'id' in docs[0]:
                 existing_ids = {doc.get('id') for doc in all_docs if doc.get('id')}
                 new_docs = [doc for doc in docs if doc.get('id') not in existing_ids]
@@ -289,6 +323,10 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 if len(new_docs) < len(docs):
                     duplicates_found = len(docs) - len(new_docs)
                     st.warning(f"⚠️ {duplicates_found} doublons détectés et ignorés à la page {page_count}")
+                    
+                    # DEBUG: Montrer quelques IDs dupliqués
+                    duplicate_ids = [doc.get('id', 'NO_ID')[:10] for doc in docs if doc.get('id') in existing_ids][:3]
+                    st.write(f"🔍 Exemples IDs dupliqués: {duplicate_ids}")
                 
                 all_docs.extend(new_docs)
             else:
@@ -302,19 +340,18 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 progress_percent = min(len(all_docs) / total_available, 1.0)
                 progress_bar.progress(progress_percent)
             
-            # En mode aperçu, on s'arrête après avoir assez de reviews
-            if is_preview and len(all_docs) >= 50:
-                st.info("🔍 Limite aperçu atteinte")
-                break
-            
-            # Gestion du cursor - CORRECTION CRITIQUE
+            # Gestion du cursor - DIAGNOSTIC APPROFONDI
             next_cursor = result.get("nextCursorMark")
             
-            # Debug du cursor
-            if page_count <= 3:
-                st.write(f"🔍 Cursor reçu: '{next_cursor}'")
-                st.write(f"🔍 Cursor actuel: '{cursor_mark}'")
-                st.write(f"🔍 Cursor identique: {next_cursor == cursor_mark}")
+            st.write(f"🔍 Cursor reçu: '{next_cursor}'")
+            st.write(f"🔍 Cursor actuel: '{cursor_mark}'")
+            st.write(f"🔍 Cursor identique: {next_cursor == cursor_mark}")
+            st.write(f"🔍 Cursor vide: {not next_cursor}")
+            
+            # DIAGNOSTIC SUPPLÉMENTAIRE: Vérifier d'autres champs de réponse
+            other_fields = {k: v for k, v in result.items() if k not in ['docs', 'nextCursorMark']}
+            if other_fields:
+                st.write(f"🔍 Autres champs réponse: {other_fields}")
             
             # CONDITIONS D'ARRÊT
             if not next_cursor:
@@ -323,9 +360,17 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 
             if next_cursor == cursor_mark:
                 st.info(f"🏁 Fin: Cursor identique ('{cursor_mark}')")
+                # DIAGNOSTIC: Tenter une requête avec rows plus petit
+                if page_count == 2 and export_params["rows"] > 10:
+                    st.warning("🔧 Tentative avec rows=5 pour contourner le problème...")
+                    current_params_small = current_params.copy()
+                    current_params_small["rows"] = 5
+                    test_result = api_client.get_reviews(**current_params_small)
+                    if test_result:
+                        st.write(f"🔍 Test rows=5: {len(test_result.get('docs', []))} docs, cursor: {test_result.get('nextCursorMark', 'None')}")
                 break
             
-            # MISE À JOUR DU CURSOR - POINT CRITIQUE
+            # MISE À JOUR DU CURSOR
             cursor_mark = next_cursor
             
             # Conditions d'arrêt supplémentaires
@@ -333,9 +378,21 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 st.info(f"🏁 Toutes les reviews récupérées ({len(all_docs)})")
                 break
             
+            # En mode aperçu, on s'arrête après avoir assez de reviews
+            if is_preview and len(all_docs) >= 50:
+                st.info("🔍 Limite aperçu atteinte")
+                break
+            
             # Pause entre requêtes
-            if page_count % 5 == 0:
-                time.sleep(0.1)
+            if page_count % 3 == 0:
+                time.sleep(0.2)
+        
+        # DIAGNOSTIC FINAL
+        st.markdown("### 🔍 Diagnostic final")
+        st.write(f"**Reviews récupérées :** {len(all_docs)}")
+        st.write(f"**Reviews attendues :** {total_available}")
+        st.write(f"**Pages parcourues :** {page_count}")
+        st.write(f"**Dernier cursor :** {cursor_mark}")
         
         # Stocker les résultats
         st.session_state.all_docs = all_docs
@@ -357,6 +414,8 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
     
     except Exception as e:
         st.error(f"❌ Erreur lors de l'export : {str(e)}")
+        import traceback
+        st.write(f"🔍 Stack trace: {traceback.format_exc()}")
     
     finally:
         # Toujours libérer le verrou
