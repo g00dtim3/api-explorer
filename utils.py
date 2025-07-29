@@ -490,6 +490,21 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
                 st.warning(f"Erreur format plat : {e}")
 
 
+def display_excel_warning():
+    """Affiche un avertissement si Excel n'est pas disponible"""
+    if not EXCEL_AVAILABLE:
+        st.warning("""
+        ⚠️ **Export Excel non disponible**
+        
+        Le package `openpyxl` n'est pas installé. Pour activer l'export Excel :
+        ```bash
+        pip install openpyxl
+        ```
+        
+        En attendant, vous pouvez utiliser les formats CSV et plat.
+        """)
+
+
 def log_export_activity(export_params, nb_reviews, export_type="STANDARD"):
     """Enregistre l'activité d'export dans un fichier log"""
     try:
