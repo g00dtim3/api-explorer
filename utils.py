@@ -537,6 +537,217 @@ def log_export_activity(export_params, nb_reviews, export_type="STANDARD"):
         
     except Exception as e:
         st.warning(f"⚠️ Erreur lors de l'enregistrement du log : {str(e)}")
+
+
+def display_export_journal():
+    """Affiche le journal des exports avec interface de consultation"""
+    log_path = Path("review_exports_log.csv")
+    
+    st.header("📋 Journal des exports")
+    
+    if not log_path.exists():
+        st.info("📁 Aucun export n'a encore été réalisé.")
+        return
+    
+    try:
+        # Charger le journal
+        df_log = pd.read_csv(log_path)
+        
+        if df_log.empty:
+            st.info("📁 Le journal des exports est vide.")
+            return
+        
+        # Convertir les dates
+        df_log['export_timestamp'] = pd.to_datetime(df_log['export_timestamp'])
+        df_log = df_log.sort_values('export_timestamp', ascending=False)
+        
+        # Statistiques rapides
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_exports = len(df_log)
+            st.metric("📊 Total exports", total_exports)
+        
+        with col2:
+            total_reviews = df_log['nb_reviews'].sum()
+            st.metric("📝 Reviews exportées", f"{total_reviews:,}")
+        
+        with col3:
+            unique_brands = df_log['brand'].nunique()
+            st.metric("🏢 Marques uniques", unique_brands)
+        
+        with col4:
+            if not df_log.empty:
+                last_export = df_log['export_timestamp'].max()
+                days_ago = (datetime.datetime.now() - last_export).days
+                st.metric("🕒 Dernier export", f"Il y a {days_ago} jour(s)")
+        
+        # Filtres
+        st.markdown("### 🔍 Filtres")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Filtre par type d'export
+            export_types = ['Tous'] + df_log['export_type'].unique().tolist()
+            selected_type = st.selectbox("Type d'export", export_types)
+        
+        with col2:
+            # Filtre par période
+            min_date = df_log['export_timestamp'].min().date()
+            max_date = df_log['export_timestamp'].max().date()
+            
+            date_range = st.date_input(
+                "Période",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date
+            )
+        
+        with col3:
+            # Filtre par marque
+            brands = ['Toutes'] + [b for b in df_log['brand'].unique() if pd.notna(b)]
+            selected_brand = st.selectbox("Marque", brands)
+        
+        # Appliquer les filtres
+        filtered_df = df_log.copy()
+        
+        if selected_type != 'Tous':
+            filtered_df = filtered_df[filtered_df['export_type'] == selected_type]
+        
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            filtered_df = filtered_df[
+                (filtered_df['export_timestamp'].dt.date >= start_date) &
+                (filtered_df['export_timestamp'].dt.date <= end_date)
+            ]
+        
+        if selected_brand != 'Toutes':
+            filtered_df = filtered_df[filtered_df['brand'] == selected_brand]
+        
+        # Affichage du tableau
+        st.markdown(f"### 📊 Historique ({len(filtered_df)} exports)")
+        
+        if not filtered_df.empty:
+            # Formatter l'affichage
+            display_df = filtered_df.copy()
+            display_df['export_timestamp'] = display_df['export_timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+            display_df['nb_reviews'] = display_df['nb_reviews'].apply(lambda x: f"{x:,}")
+            
+            # Réorganiser les colonnes
+            columns_order = [
+                'export_timestamp', 'export_type', 'nb_reviews', 
+                'brand', 'product', 'start_date', 'end_date', 
+                'country', 'rows'
+            ]
+            
+            available_columns = [col for col in columns_order if col in display_df.columns]
+            display_df = display_df[available_columns]
+            
+            # Renommer pour l'affichage
+            column_names = {
+                'export_timestamp': 'Date/Heure',
+                'export_type': 'Type',
+                'nb_reviews': 'Reviews',
+                'brand': 'Marque',
+                'product': 'Produits',
+                'start_date': 'Début',
+                'end_date': 'Fin',
+                'country': 'Pays',
+                'rows': 'Rows/page'
+            }
+            
+            display_df = display_df.rename(columns=column_names)
+            
+            # Affichage avec colonnes configurées
+            st.dataframe(
+                display_df, 
+                use_container_width=True,
+                height=400
+            )
+            
+            # Boutons d'action
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Export du journal
+                csv_journal = filtered_df.to_csv(index=False)
+                st.download_button(
+                    "💾 Télécharger le journal",
+                    csv_journal,
+                    file_name=f"journal_exports_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            
+            with col2:
+                # Statistiques détaillées
+                if st.button("📈 Statistiques détaillées"):
+                    display_detailed_stats(filtered_df)
+            
+            with col3:
+                # Nettoyage du journal
+                if st.button("🗑️ Nettoyer le journal", help="Supprime les exports de plus de 30 jours"):
+                    clean_old_exports(log_path)
+        else:
+            st.info("Aucun export ne correspond aux filtres sélectionnés.")
+    
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la lecture du journal : {e}")
+        st.info("Le journal peut être corrompu. Vous pouvez le supprimer pour repartir à zéro.")
+
+
+def display_detailed_stats(df_log):
+    """Affiche des statistiques détaillées sur les exports"""
+    st.markdown("### 📈 Statistiques détaillées")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 🔄 Répartition par type")
+        if not df_log.empty:
+            type_counts = df_log['export_type'].value_counts()
+            st.bar_chart(type_counts)
+        
+        st.markdown("#### 📅 Évolution temporelle")
+        if not df_log.empty:
+            df_daily = df_log.groupby(df_log['export_timestamp'].dt.date)['nb_reviews'].sum()
+            st.line_chart(df_daily)
+    
+    with col2:
+        st.markdown("#### 🏢 Top marques")
+        if not df_log.empty:
+            brand_stats = df_log.groupby('brand')['nb_reviews'].sum().sort_values(ascending=False).head(10)
+            st.bar_chart(brand_stats)
+        
+        st.markdown("#### 📊 Volumes par export")
+        if not df_log.empty:
+            volume_ranges = pd.cut(
+                df_log['nb_reviews'], 
+                bins=[0, 100, 1000, 5000, float('inf')], 
+                labels=['< 100', '100-1K', '1K-5K', '> 5K']
+            ).value_counts()
+            st.bar_chart(volume_ranges)
+
+
+def clean_old_exports(log_path, days_to_keep=30):
+    """Nettoie les anciens exports du journal"""
+    try:
+        df_log = pd.read_csv(log_path)
+        df_log['export_timestamp'] = pd.to_datetime(df_log['export_timestamp'])
+        
+        cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days_to_keep)
+        df_cleaned = df_log[df_log['export_timestamp'] >= cutoff_date]
+        
+        removed_count = len(df_log) - len(df_cleaned)
+        
+        if removed_count > 0:
+            df_cleaned.to_csv(log_path, index=False)
+            st.success(f"✅ {removed_count} anciens exports supprimés (> {days_to_keep} jours)")
+            st.rerun()
+        else:
+            st.info("Aucun ancien export à supprimer")
+    
+    except Exception as e:
+        st.error(f"❌ Erreur lors du nettoyage : {e}")
     """Enregistre l'activité d'export dans un fichier log"""
     try:
         log_path = Path("review_exports_log.csv")
