@@ -264,8 +264,6 @@ def display_brand_details_table(total_reviews):
         st.info("💡 Cela peut être normal si des reviews mentionnent plusieurs marques")
     else:
         st.success("✅ Cohérence vérifiée entre le total groupé et la somme individuelle")
-            except Exception as e:
-                st.error(f"❌ Erreur lors du calcul : {e}")
 
 
 def display_bulk_export_interface():
@@ -402,10 +400,6 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             current_params = bulk_params.copy()
             current_params["cursorMark"] = cursor_mark
             
-            # Debug des premières pages
-            if page_count <= 3:
-                st.write(f"🔍 Debug bulk page {page_count}: cursor={cursor_mark[:20]}...")
-            
             # Appel API
             result = api_client.get_reviews(**current_params)
             
@@ -420,9 +414,6 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             docs = result.get("docs", [])
             all_docs.extend(docs)
             
-            # Affichage du progrès détaillé
-            st.write(f"📊 Page {page_count}: +{len(docs)} reviews (Total: {len(all_docs):,})")
-            
             # Mise à jour progression
             if progress_bar is not None:
                 progress_percent = min(len(all_docs) / total_available, 1.0)
@@ -434,11 +425,6 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             
             # Gestion du cursor
             next_cursor = result.get("nextCursorMark")
-            
-            # Debug du cursor
-            if page_count <= 3:
-                st.write(f"🔍 Cursor actuel: {cursor_mark[:20]}...")
-                st.write(f"🔍 Cursor suivant: {next_cursor[:20] if next_cursor else 'None'}...")
             
             # Conditions d'arrêt
             if not next_cursor:
