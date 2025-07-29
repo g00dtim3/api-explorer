@@ -401,11 +401,11 @@ def execute_bulk_export(rows_per_page, use_random, random_seed, is_preview):
             
             # Paramètres avec cursor - CORRECTION CRITIQUE
             current_params = bulk_params.copy()
-            current_params["cursorMark"] = cursor_mark
+            current_params["nextCursorMark"] = cursor_mark  # ✅ CORRECTION: nextCursorMark au lieu de cursorMark
             
             # Debug des paramètres pour les premières pages
             if page_count <= 3:
-                st.write(f"🔍 Bulk page {page_count}: cursor='{cursor_mark}', rows={current_params['rows']}")
+                st.write(f"🔍 Bulk page {page_count}: nextCursorMark='{cursor_mark}', rows={current_params['rows']}")
             
             # Appel API
             result = api_client.get_reviews(**current_params)
