@@ -239,17 +239,20 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             st.info(f"📊 Mode aperçu : Chargement de {max_reviews} reviews maximum")
         else:
             expected_pages = (total_available + rows_per_page - 1) // rows_per_page
-            st.info(f"🔄 Export complet : {total_available:,} reviews sur {expected_pages} pages estimées")
-        
+            st.info(f"🔄 Export complet : {total_available:,} reviews...")
+            
         # Interface de progression
         status_text = st.empty()
         progress_bar = None if is_preview else st.progress(0)
         
-        # Variables de pagination
-        cursor_mark = "*"
+        # Variables de pagination - CORRECTION PRINCIPALE
+        cursor_mark = "*"  # Toujours commencer par "*"
         page_count = 0
         all_docs = []
-        max_iterations = 1000 if not is_preview else 1
+        max_iterations = 1000 if not is_preview else 10  # Limite de sécurité
+        
+        # Debug initial
+        st.write(f"🔍 Debug: Démarrage avec cursorMark='*', rows={export_params['rows']}")
         
         # Boucle d'export
         while page_count < max_iterations:
@@ -258,9 +261,13 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             current_count = len(all_docs)
             status_text.text(f"📥 Page {page_count} | Récupéré: {current_count:,}/{total_available:,} reviews")
             
-            # Paramètres avec cursor
+            # Paramètres avec cursor - CORRECTION CRITIQUE
             current_params = export_params.copy()
             current_params["cursorMark"] = cursor_mark
+            
+            # Debug des paramètres
+            if page_count <= 3:
+                st.write(f"🔍 Page {page_count}: cursor='{cursor_mark}', rows={current_params['rows']}")
             
             # Appel API
             result = api_client.get_reviews(**current_params)
@@ -270,33 +277,64 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 break
             
             docs = result.get("docs", [])
-            all_docs.extend(docs)
+            
+            # CORRECTION PRINCIPALE: Vérifier les doublons
+            docs_before = len(all_docs)
+            
+            # En mode développement, vérifier les IDs pour éviter les doublons
+            if all_docs and 'id' in docs[0]:
+                existing_ids = {doc.get('id') for doc in all_docs if doc.get('id')}
+                new_docs = [doc for doc in docs if doc.get('id') not in existing_ids]
+                
+                if len(new_docs) < len(docs):
+                    duplicates_found = len(docs) - len(new_docs)
+                    st.warning(f"⚠️ {duplicates_found} doublons détectés et ignorés à la page {page_count}")
+                
+                all_docs.extend(new_docs)
+            else:
+                all_docs.extend(docs)
+            
+            docs_after = len(all_docs)
+            st.write(f"📊 Page {page_count}: +{len(docs)} reçus, +{docs_after - docs_before} ajoutés (Total: {docs_after})")
             
             # Mise à jour progression
             if progress_bar is not None:
                 progress_percent = min(len(all_docs) / total_available, 1.0)
                 progress_bar.progress(progress_percent)
             
-            # En mode aperçu, on s'arrête après la première page
-            if is_preview:
+            # En mode aperçu, on s'arrête après avoir assez de reviews
+            if is_preview and len(all_docs) >= 50:
+                st.info("🔍 Limite aperçu atteinte")
                 break
             
-            # Gestion du cursor
+            # Gestion du cursor - CORRECTION CRITIQUE
             next_cursor = result.get("nextCursorMark")
-            if not next_cursor or next_cursor == cursor_mark:
+            
+            # Debug du cursor
+            if page_count <= 3:
+                st.write(f"🔍 Cursor reçu: '{next_cursor}'")
+                st.write(f"🔍 Cursor actuel: '{cursor_mark}'")
+                st.write(f"🔍 Cursor identique: {next_cursor == cursor_mark}")
+            
+            # CONDITIONS D'ARRÊT
+            if not next_cursor:
+                st.info(f"🏁 Fin: Pas de nextCursorMark")
+                break
+                
+            if next_cursor == cursor_mark:
+                st.info(f"🏁 Fin: Cursor identique ('{cursor_mark}')")
                 break
             
+            # MISE À JOUR DU CURSOR - POINT CRITIQUE
             cursor_mark = next_cursor
             
-            # Conditions d'arrêt
+            # Conditions d'arrêt supplémentaires
             if len(all_docs) >= total_available:
-                break
-            
-            if is_preview and len(all_docs) >= 50:
+                st.info(f"🏁 Toutes les reviews récupérées ({len(all_docs)})")
                 break
             
             # Pause entre requêtes
-            if page_count % 10 == 0:
+            if page_count % 5 == 0:
                 time.sleep(0.1)
         
         # Stocker les résultats
