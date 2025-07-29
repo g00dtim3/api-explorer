@@ -83,6 +83,10 @@ class APIClient:
         """Récupère les markets disponibles"""
         return self.fetch("/markets")
     
+    def get_ratings(self):
+        """Récupère la liste des valeurs de rating disponibles"""
+        return self.fetch("/ratings")
+    
     def get_attributes(self, category=None, subcategory=None, brand=None):
         """Récupère les attributs dynamiquement selon les filtres"""
         params = {}
