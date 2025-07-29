@@ -236,6 +236,9 @@ def display_products_interface():
     """Affiche l'interface de gestion des produits"""
     st.header("📦 Gestion des produits")
     
+    # Affichage de l'estimation des volumes avant de choisir la stratégie
+    display_volume_strategy_selector()
+    
     # Étapes de chargement
     col1, col2 = st.columns(2)
     
@@ -269,6 +272,149 @@ def display_products_interface():
     if st.session_state.product_list_loaded and st.session_state.product_data_cache:
         st.markdown("### 🎯 Étape 3: Sélection des produits")
         display_product_selection()
+
+
+def display_volume_strategy_selector():
+    """Affiche l'estimation des volumes et le sélecteur de stratégie"""
+    filters = st.session_state.filters
+    
+    if not filters.get("brand"):
+        st.warning("⚠️ Aucune marque sélectionnée")
+        return
+    
+    st.markdown("---")
+    st.markdown("### 🎯 Stratégie de traitement")
+    
+    # Sélecteur de stratégie
+    export_strategy = st.radio(
+        "Choisissez votre approche",
+        [
+            "🎯 Sélection précise de produits (recommandé pour analyses ciblées)",
+            "🚀 Export en masse par marque (recommandé pour beaucoup de produits)"
+        ],
+        key="export_strategy_choice",
+        help="Choisissez dès maintenant pour optimiser le chargement des données"
+    )
+    
+    st.session_state.export_strategy = export_strategy
+    
+    # Affichage d'informations selon la stratégie
+    if "🚀 Export en masse" in export_strategy:
+        st.success("⚡ Mode rapide sélectionné : Pas de chargement de liste de produits")
+        st.info(f"Exportera toutes les reviews pour : {', '.join(filters['brand'])}")
+        
+        # Estimation du volume total en mode bulk
+        display_bulk_volume_preview()
+        
+    else:
+        st.info("🔍 Mode précis sélectionné : La liste des produits va être chargée")
+        
+        # Estimation du nombre de produits à charger
+        display_products_estimation()
+
+
+def display_bulk_volume_preview():
+    """Affiche un aperçu du volume en mode bulk"""
+    filters = st.session_state.filters
+    
+    if st.button("📊 Estimer le volume total (mode bulk)", key="estimate_bulk_preview"):
+        with st.spinner("Estimation du volume bulk..."):
+            try:
+                # Paramètres pour toutes les marques en une fois
+                bulk_params = build_filter_params(filters)
+                
+                # Appel API pour obtenir les métriques globales
+                metrics = api_client.get_metrics(**bulk_params)
+                if metrics:
+                    total_reviews = metrics.get("nbDocs", 0)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("📊 Volume total estimé", f"{total_reviews:,} reviews")
+                    with col2:
+                        st.metric("🏢 Marques", len(filters["brand"]))
+                    with col3:
+                        avg_per_brand = total_reviews / len(filters["brand"]) if filters["brand"] else 0
+                        st.metric("📈 Moyenne par marque", f"{avg_per_brand:.0f} reviews")
+                    
+                    if total_reviews > 10000:
+                        st.success("✅ Volume important - Le mode bulk est idéal pour ce cas")
+                    else:
+                        st.info("💡 Volume modéré - Les deux modes sont viables")
+                        
+                else:
+                    st.error("❌ Impossible d'obtenir les métriques")
+            except Exception as e:
+                st.error(f"❌ Erreur lors du calcul : {e}")
+
+
+def display_products_estimation():
+    """Affiche l'estimation du nombre de produits à charger"""
+    filters = st.session_state.filters
+    
+    total_products_estimate = 0
+    with st.spinner("Estimation du nombre de produits..."):
+        # Faire une estimation groupée pour éviter trop d'appels API
+        sample_brands = filters["brand"][:3]  # Échantillon de 3 marques max
+        
+        for brand in sample_brands:
+            try:
+                products = api_client.get_products(
+                    brand=brand,
+                    category=filters["category"],
+                    subcategory=filters["subcategory"],
+                    start_date=filters["start_date"],
+                    end_date=filters["end_date"],
+                    country=filters.get("country"),
+                    source=filters.get("source"),
+                    market=filters.get("market")
+                )
+                if products and products.get("products"):
+                    total_products_estimate += len(products["products"])
+            except Exception as e:
+                st.warning(f"Erreur estimation pour {brand}: {e}")
+    
+    # Extrapoler pour toutes les marques
+    if len(filters["brand"]) > len(sample_brands):
+        avg_products_per_brand = total_products_estimate / len(sample_brands) if sample_brands else 0
+        total_products_estimate = int(avg_products_per_brand * len(filters["brand"]))
+    
+    if total_products_estimate > 500:
+        st.warning(f"⚠️ Estimation : ~{total_products_estimate} produits à charger. Cela peut prendre du temps et consommer du quota API.")
+        
+        # Estimation du nombre de reviews pour comparaison
+        display_reviews_comparison()
+        
+        if st.button("🔄 Changer pour l'export en masse", key="switch_to_bulk"):
+            st.session_state.export_strategy = "🚀 Export en masse par marque (recommandé pour beaucoup de produits)"
+            st.rerun()
+    else:
+        st.success(f"✅ Estimation : ~{total_products_estimate} produits à charger")
+
+
+def display_reviews_comparison():
+    """Affiche une comparaison du volume de reviews pour aider à la décision"""
+    filters = st.session_state.filters
+    
+    with st.spinner("Estimation du volume de reviews..."):
+        try:
+            estimation_params = build_filter_params(filters)
+            
+            total_reviews_metrics = api_client.get_metrics(**estimation_params)
+            total_reviews = total_reviews_metrics.get("nbDocs", 0) if total_reviews_metrics else 0
+            
+            if total_reviews > 0:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💡 Volume total de reviews", f"{total_reviews:,}")
+                with col2:
+                    st.metric("📦 Produits estimés", f"~{st.session_state.get('products_estimate', '?')}")
+                
+                if total_reviews > 5000:
+                    st.info("💭 Avec ce volume, l'export en masse pourrait être plus efficace")
+            
+        except Exception as e:
+            st.warning(f"Erreur estimation reviews: {e}")
 
 
 def display_product_selection():
@@ -465,22 +611,43 @@ def display_export_configuration():
     st.markdown("---")
     st.header("💾 Configuration réutilisable")
     
+    # Inclure la stratégie choisie dans la configuration
     export_config = export_configuration_to_json(
         st.session_state.filters,
         st.session_state.selected_product_ids
     )
     
-    st.markdown("Copiez cette configuration pour la réutiliser dans les modules d'export :")
-    st.code(json.dumps(export_config, indent=2), language="json")
+    # Ajouter des métadonnées sur la stratégie
+    strategy = st.session_state.get("export_strategy", "")
+    if "🚀 Export en masse" in strategy:
+        export_config["export_mode"] = "BULK_BY_BRAND"
+        export_config["note"] = "Configuration optimisée pour export en masse"
+    else:
+        export_config["export_mode"] = "MANUAL_SELECTION"
+        export_config["note"] = "Configuration avec sélection précise de produits"
     
-    # Bouton de téléchargement
-    config_json = json.dumps(export_config, indent=2)
-    st.download_button(
-        "💾 Télécharger la configuration",
-        config_json,
-        file_name="configuration_export.json",
-        mime="application/json"
-    )
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("Copiez cette configuration pour la réutiliser dans les modules d'export :")
+        st.code(json.dumps(export_config, indent=2), language="json")
+    
+    with col2:
+        # Bouton de téléchargement
+        config_json = json.dumps(export_config, indent=2)
+        st.download_button(
+            "💾 Télécharger la configuration",
+            config_json,
+            file_name="configuration_export.json",
+            mime="application/json"
+        )
+        
+        # Recommandation de module
+        strategy = st.session_state.get("export_strategy", "")
+        if "🚀 Export en masse" in strategy:
+            st.success("**Recommandation :**\n\nUtilisez le **Module 3 - Export Bulk** pour cette configuration")
+        else:
+            st.info("**Recommandation :**\n\nUtilisez le **Module 2 - Export Manuel** pour cette configuration")
 
 
 def main():
@@ -507,7 +674,7 @@ def main():
         display_products_interface()
         
         # Estimation du volume
-        if st.session_state.selected_product_ids:
+        if st.session_state.selected_product_ids and st.session_state.get("export_strategy", "").startswith("🎯"):
             display_volume_estimation()
         
         # Configuration d'export
