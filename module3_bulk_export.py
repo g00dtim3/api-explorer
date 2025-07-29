@@ -112,72 +112,158 @@ def display_bulk_volume_estimation():
     
     st.markdown("### 📊 Estimation du volume bulk")
     
+    # Bouton pour calculer le volume global
     if st.button("📈 Calculer le volume total par marque", key="estimate_bulk_volume"):
-        with st.spinner("Calcul du volume bulk..."):
-            try:
-                # Paramètres pour toutes les marques en une fois
-                bulk_params = build_filter_params(filters)
-                # En mode bulk, on prend toutes les marques ensemble
+        calculate_bulk_volume(filters, brands)
+    
+    # Affichage des résultats s'ils existent
+    display_bulk_volume_results(brands)
+
+
+def calculate_bulk_volume(filters, brands):
+    """Calcule et stocke le volume bulk"""
+    with st.spinner("Calcul du volume bulk..."):
+        try:
+            # Paramètres pour toutes les marques en une fois
+            bulk_params = build_filter_params(filters)
+            
+            # Appel API pour obtenir les métriques globales
+            metrics = api_client.get_metrics(**bulk_params)
+            if metrics:
+                total_reviews = metrics.get("nbDocs", 0)
                 
-                # Appel API pour obtenir les métriques globales
-                metrics = api_client.get_metrics(**bulk_params)
-                if metrics:
-                    total_reviews = metrics.get("nbDocs", 0)
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("📊 Volume total estimé", f"{total_reviews:,} reviews")
-                    with col2:
-                        st.metric("🏢 Marques", len(brands))
-                    with col3:
-                        avg_per_brand = total_reviews / len(brands) if brands else 0
-                        st.metric("📈 Moyenne par marque", f"{avg_per_brand:.0f} reviews")
-                    
-                    # Estimation détaillée par marque (optionnel)
-                    if st.checkbox("📋 Voir le détail par marque", key="show_brand_details_bulk"):
-                        with st.spinner("Détail par marque..."):
-                            brand_details = []
-                            
-                            for brand in brands:
-                                # Paramètres spécifiques à chaque marque
-                                brand_params = build_filter_params(filters)
-                                # Remplacer la liste de marques par une seule marque
-                                brand_params["brand"] = brand
-                                
-                                try:
-                                    brand_metrics = api_client.get_metrics(**brand_params)
-                                    brand_count = brand_metrics.get("nbDocs", 0) if brand_metrics else 0
-                                except Exception as e:
-                                    st.warning(f"Erreur pour la marque {brand}: {e}")
-                                    brand_count = 0
-                                
-                                brand_details.append({
-                                    "Marque": brand,
-                                    "Reviews": brand_count
-                                })
-                            
-                            # Affichage du tableau détaillé
-                            if brand_details:
-                                df_details = pd.DataFrame(brand_details)
-                                df_details = df_details.sort_values("Reviews", ascending=False)
-                                st.dataframe(df_details, use_container_width=True)
-                                
-                                # Vérification de cohérence
-                                sum_individual = df_details["Reviews"].sum()
-                                if abs(sum_individual - total_reviews) > total_reviews * 0.1:  # 10% de différence
-                                    st.warning(f"⚠️ Différence détectée : Total groupé ({total_reviews:,}) ≠ Somme individuelle ({sum_individual:,})")
-                                    st.info("💡 Cela peut être normal si des reviews mentionnent plusieurs marques")
-                                else:
-                                    st.success("✅ Cohérence vérifiée entre le total groupé et la somme individuelle")
-                    
-                    # Stocker pour l'interface d'export
-                    st.session_state.estimated_bulk_volume = total_reviews
-                else:
-                    st.error("❌ Impossible d'obtenir les métriques globales")
+                # Stocker les résultats dans session_state
+                st.session_state.bulk_volume_results = {
+                    "total_reviews": total_reviews,
+                    "brands_count": len(brands),
+                    "avg_per_brand": total_reviews / len(brands) if brands else 0,
+                    "calculated": True
+                }
+                
+                st.success(f"✅ Volume calculé : {total_reviews:,} reviews pour {len(brands)} marques")
+            else:
+                st.error("❌ Impossible d'obtenir les métriques globales")
+                
+        except Exception as e:
+            st.error(f"❌ Erreur lors du calcul : {e}")
+
+
+def display_bulk_volume_results(brands):
+    """Affiche les résultats du calcul bulk s'ils existent"""
+    bulk_results = st.session_state.get("bulk_volume_results", {})
+    
+    if not bulk_results.get("calculated"):
+        return
+    
+    # Affichage des métriques principales
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("📊 Volume total estimé", f"{bulk_results['total_reviews']:,} reviews")
+    with col2:
+        st.metric("🏢 Marques", bulk_results['brands_count'])
+    with col3:
+        st.metric("📈 Moyenne par marque", f"{bulk_results['avg_per_brand']:.0f} reviews")
+    
+    # Section détail par marque (séparée du bouton principal)
+    st.markdown("---")
+    st.markdown("#### 📋 Détail par marque")
+    
+    # Checkbox séparée avec sa propre logique
+    show_details = st.checkbox("Afficher le détail par marque", key="show_brand_details_bulk")
+    
+    if show_details:
+        calculate_and_display_brand_details(brands, bulk_results['total_reviews'])
+    
+    # Stocker pour l'interface d'export
+    st.session_state.estimated_bulk_volume = bulk_results['total_reviews']
+
+
+def calculate_and_display_brand_details(brands, total_reviews):
+    """Calcule et affiche le détail par marque"""
+    filters = st.session_state.filters
+    
+    # Vérifier si on a déjà calculé les détails
+    if "brand_details_cache" not in st.session_state:
+        st.session_state.brand_details_cache = {}
+    
+    # Bouton pour recalculer les détails
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        if st.button("🔄 Calculer détails", key="calc_brand_details"):
+            calculate_brand_details(brands, filters)
+    
+    with col2:
+        if st.session_state.brand_details_cache:
+            st.info(f"Derniers détails calculés pour {len(st.session_state.brand_details_cache)} marques")
+    
+    # Affichage des détails s'ils existent
+    if st.session_state.brand_details_cache:
+        display_brand_details_table(total_reviews)
+
+
+def calculate_brand_details(brands, filters):
+    """Calcule les détails par marque"""
+    with st.spinner("Calcul du détail par marque..."):
+        brand_details = {}
+        progress_bar = st.progress(0)
+        
+        for i, brand in enumerate(brands):
+            progress = (i + 1) / len(brands)
+            progress_bar.progress(progress)
+            
+            # Paramètres spécifiques à chaque marque
+            brand_params = build_filter_params(filters)
+            brand_params["brand"] = brand  # Une seule marque
+            
+            try:
+                brand_metrics = api_client.get_metrics(**brand_params)
+                brand_count = brand_metrics.get("nbDocs", 0) if brand_metrics else 0
             except Exception as e:
-                st.error(f"❌ Erreur lors du calcul : {e}")
-                st.write(f"🔍 Debug: Filtres = {filters}")
-                st.write(f"🔍 Debug: Paramètres = {build_filter_params(filters) if filters else 'Aucun'}")
+                st.warning(f"Erreur pour la marque {brand}: {e}")
+                brand_count = 0
+            
+            brand_details[brand] = brand_count
+        
+        progress_bar.empty()
+        st.session_state.brand_details_cache = brand_details
+        st.success(f"✅ Détails calculés pour {len(brand_details)} marques")
+
+
+def display_brand_details_table(total_reviews):
+    """Affiche le tableau des détails par marque"""
+    brand_details = st.session_state.brand_details_cache
+    
+    if not brand_details:
+        return
+    
+    # Créer le DataFrame
+    df_details = pd.DataFrame([
+        {"Marque": brand, "Reviews": count}
+        for brand, count in brand_details.items()
+    ])
+    
+    df_details = df_details.sort_values("Reviews", ascending=False)
+    st.dataframe(df_details, use_container_width=True)
+    
+    # Vérification de cohérence
+    sum_individual = df_details["Reviews"].sum()
+    difference = abs(sum_individual - total_reviews)
+    tolerance = total_reviews * 0.1  # 10% de tolérance
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("Somme individuelle", f"{sum_individual:,}")
+    with col2:
+        st.metric("Différence", f"{difference:,}")
+    
+    if difference > tolerance:
+        st.warning(f"⚠️ Différence détectée : Total groupé ({total_reviews:,}) ≠ Somme individuelle ({sum_individual:,})")
+        st.info("💡 Cela peut être normal si des reviews mentionnent plusieurs marques")
+    else:
+        st.success("✅ Cohérence vérifiée entre le total groupé et la somme individuelle")
             except Exception as e:
                 st.error(f"❌ Erreur lors du calcul : {e}")
 
