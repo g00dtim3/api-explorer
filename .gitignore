@@ -1,0 +1,17 @@
+# Secrets : jamais dans Git
+.streamlit/secrets.toml
+.env
+*.env
+
+# Exports et données réelles (verbatims) : jamais dans Git
+exports/
+audit_output/
+review_exports_log.csv
+*.jsonl
+*.jsonl.gz
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
