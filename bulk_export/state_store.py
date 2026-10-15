@@ -365,6 +365,47 @@ def release_lease(conn: psycopg.Connection, export_id: str, owner: str) -> None:
     )
 
 
+# ─── Exports orphelins (application redémarrée) ───────────────────────────────
+
+ORPHAN_MESSAGE = "Interrompu par un redémarrage de l'application — reprenable."
+
+
+def recover_orphans(conn: psycopg.Connection) -> list[str]:
+    """Exports en RUNNING / STOPPING dont plus personne ne tient le bail (expiré ou absent)
+    → PAUSED, avec un événement. Renvoie leurs identifiants. Un export dont le bail est valide
+    n'est jamais touché."""
+    recovered: list[str] = []
+    with conn.transaction():
+        with conn.cursor() as cur:
+            rows = cur.execute(
+                """SELECT export_id, status FROM exports
+                   WHERE status IN ('RUNNING', 'STOPPING')
+                     AND (lease_expires_at IS NULL OR lease_expires_at <= now())
+                   ORDER BY last_updated_at DESC
+                   FOR UPDATE SKIP LOCKED"""
+            ).fetchall()
+            for export_id, status in rows:
+                check_transition(status, ExportStatus.PAUSED)
+                cur.execute(
+                    """UPDATE exports SET status = 'PAUSED', stop_requested = FALSE, lease_owner = NULL,
+                              lease_expires_at = NULL, last_updated_at = now()
+                       WHERE export_id = %s""",
+                    (export_id,),
+                )
+                _insert_event(cur, export_id, "WARNING", f"{ORPHAN_MESSAGE} (statut {status} → PAUSED)")
+                recovered.append(export_id)
+    return recovered
+
+
+def active_export_id(conn: psycopg.Connection) -> str | None:
+    """L'export dont le bail est valide en ce moment (au plus un), sinon None."""
+    row = conn.execute(
+        """SELECT export_id FROM exports WHERE lease_owner IS NOT NULL AND lease_expires_at > now()
+           ORDER BY lease_expires_at DESC LIMIT 1"""
+    ).fetchone()
+    return row[0] if row else None
+
+
 # ─── Journal d'événements ─────────────────────────────────────────────────────
 
 def add_event(conn: psycopg.Connection, export_id: str | None, level: str, message: str) -> None:

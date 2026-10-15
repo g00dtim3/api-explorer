@@ -54,6 +54,7 @@ supabase_url = "https://<projet>.supabase.co"
 supabase_service_key = "..."      # clé service_role : JAMAIS dans le code ni dans Git
 storage_bucket = "bulk-exports"   # bucket PRIVÉ
 retention_days = 30
+auto_resume = false             # true = relancer seul un export interrompu (cf. EXECUTION.md)
 ```
 
 Le token de l'API n'a pas besoin d'être recopié : Bulk Export V2 lit le même `[api] token` que le reste de l'application.

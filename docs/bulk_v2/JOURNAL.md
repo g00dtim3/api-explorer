@@ -229,3 +229,53 @@ suivante ; sinon, il la réécrit. Les deux cas sont testés.
 1. **À faire par vous : exécuter `002_rejected.sql` dans Supabase** (LISEZMOI §1.3).
 2. Le premier export réel arrivera avec le lancement en ligne de commande (sprint 4) ou l'interface (sprint 5).
 3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).
+
+---
+
+## Sprint 4 — Exécution en arrière-plan, bail et reprise (15/10/2026)
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/runner.py` | Gestionnaire d'exécution : tâche de fond, battement de cœur du bail, arrêt (drapeau en base), reprise, détection des orphelins, reprise automatique optionnelle, erreur imprévue → FAILED |
+| `bulk_export/run.py` | Ligne de commande : `--create`, `--export-id`, `--status`, `--recover` ; Ctrl+C = arrêt propre ; secrets uniquement par variables d'environnement |
+| `bulk_export/state_store.py` | `recover_orphans` (RUNNING/STOPPING sans bail valide → PAUSED + événement), `active_export_id` |
+| `bulk_export/settings.py` | Option `auto_resume` (désactivée par défaut) ; `http://` autorisé uniquement vers 127.0.0.1/localhost (faux serveur des tests) |
+| `docs/bulk_v2/EXECUTION.md` | Ce qui arrête un export, ce qui ne l'arrête pas, comment reprendre |
+| `tests/` | +12 tests : gestionnaire (9), et vrais processus : `kill -9`, Ctrl+C, paramètres manquants (3) |
+
+### ⚠️ Limite assumée de la V1
+**L'export s'arrête si l'application Streamlit redémarre, est redéployée ou est mise en veille.** C'est la limite
+notée dans `ADAPTATION_SUPABASE.md` §4, faute de serveur dédié. **Aucune donnée enregistrée n'est perdue** :
+l'export est reconnu comme interrompu (2 minutes au plus), passe en PAUSED et se reprend d'un clic, ou tout seul si
+`auto_resume = true`. Un worker indépendant de l'application (GitHub Actions) reste possible au sprint 8 optionnel,
+grâce à la ligne de commande.
+
+### Décisions
+- **Battement de cœur** (écart avec le fichier du sprint, validé) : le bail dure 2 minutes et il est prolongé toutes
+  les 30 secondes par une tâche séparée, y compris pendant les longues attentes de l'API. Sans cela, une page lente
+  aurait fait passer à tort un export vivant pour un orphelin. Un test le vérifie : il échoue bien si on retire le
+  battement.
+- Le gestionnaire prend le bail **avant** de lancer la tâche de fond : la réponse « lancé » ou « refusé » est
+  immédiate et fiable.
+- Le drapeau d'arrêt est écrit **en base** : un arrêt demandé depuis un autre onglet, ou après un rechargement,
+  est bien pris en compte.
+- La ligne de commande ne prend **aucun secret en argument** (rien dans l'historique du terminal).
+
+### Test de résistance sur de vrais processus
+Le test lance `python -m bulk_export.run` contre un faux serveur API local, puis :
+1. le tue avec `kill -9` après 4 pages ;
+2. vérifie que rien n'est touché tant que le bail court ;
+3. vérifie qu'après expiration, l'export est reconnu orphelin et passe en PAUSED ;
+4. le reprend en ligne de commande.
+
+Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans interruption.
+
+### Tests
+- `pytest` : **211 réussis** avec la base Postgres de test.
+
+### Points ouverts
+1. Le **premier export réel** est possible dès maintenant en ligne de commande (`EXECUTION.md`), ou au sprint 5 depuis
+   l'application.
+2. Rappel : `002_rejected.sql` doit être exécuté dans Supabase avant tout export réel.
+3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).

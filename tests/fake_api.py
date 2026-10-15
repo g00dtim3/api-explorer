@@ -92,3 +92,41 @@ class FakePagedServer:
         if index >= len(self.pages):
             return page([], cursor, nb=self.nb_docs)
         return page(self.pages[index], self.cursor_for(index + 1), nb=self.nb_docs)
+
+
+class SlowServer:
+    """Enveloppe un faux serveur : chaque appel /reviews attend ``delay`` secondes (temps réel)."""
+
+    def __init__(self, inner, delay):
+        self.inner, self.delay = inner, delay
+
+    def get(self, url, headers=None, timeout=None):
+        import time
+        if "/reviews" in url:
+            time.sleep(self.delay)
+        return self.inner.get(url, headers=headers, timeout=timeout)
+
+
+def serve_http(fake_server, port=0):
+    """Expose un faux serveur sur http://127.0.0.1:<port> (pour les tests en processus séparé).
+    Renvoie (httpd, base_url) ; arrêter avec httpd.shutdown()."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            resp = fake_server.get(f"http://127.0.0.1{self.path}")
+            self.send_response(resp.status_code)
+            for k, v in resp.headers.items():
+                self.send_header(k, v)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp.content)))
+            self.end_headers()
+            self.wfile.write(resp.content)
+
+        def log_message(self, *args):  # silence
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, f"http://127.0.0.1:{httpd.server_address[1]}"

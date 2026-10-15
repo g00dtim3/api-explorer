@@ -29,7 +29,19 @@ _ENV_NAMES = {
     "supabase_service_key": "BULK_EXPORT_SUPABASE_SERVICE_KEY",
     "storage_bucket": "BULK_EXPORT_STORAGE_BUCKET",
     "retention_days": "BULK_EXPORT_RETENTION_DAYS",
+    "auto_resume": "BULK_EXPORT_AUTO_RESUME",
 }
+
+
+def _as_bool(value: Any, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "oui", "on"):
+        return True
+    if text in ("", "0", "false", "no", "non", "off"):
+        return False
+    raise SettingsError(f"Paramètre invalide : {name} (vrai/faux attendu).")
 
 
 class SettingsError(RuntimeError):
@@ -45,6 +57,8 @@ class Settings:
     supabase_service_key: str | None = field(default=None, repr=False)
     storage_bucket: str = "bulk-exports"
     retention_days: int = 30
+    # Relancer automatiquement un export interrompu par un redémarrage (désactivé par défaut).
+    auto_resume: bool = False
 
 
 def _from_streamlit() -> Mapping[str, Any] | None:
@@ -88,6 +102,7 @@ def load_settings(source: Mapping[str, Any] | None = None, *, use_streamlit: boo
         supabase_service_key=raw.get("supabase_service_key") or None,
         storage_bucket=str(raw.get("storage_bucket") or "bulk-exports"),
         retention_days=retention,
+        auto_resume=_as_bool(raw.get("auto_resume", False), "auto_resume"),
     )
     # Dès qu'un secret est connu, il est masqué dans tous les messages.
     register_secret(settings.database_url)
@@ -131,7 +146,9 @@ def load_api_credentials(source: Mapping[str, Any] | None = None, *,
     register_secret(str(token))
     creds = ApiCredentials(token=str(token))
     if base_url:
-        if not str(base_url).startswith("https://"):
+        # https obligatoire, sauf vers la machine locale (faux serveur des tests).
+        local = str(base_url).startswith(("http://127.0.0.1:", "http://localhost:"))
+        if not (str(base_url).startswith("https://") or local):
             raise SettingsError("Paramètre invalide : base_url (https:// obligatoire).")
         creds = ApiCredentials(token=str(token), base_url=str(base_url).rstrip("/"))
     return creds
