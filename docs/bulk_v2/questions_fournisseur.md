@@ -46,7 +46,7 @@ perdue ni dupliquée, et de pouvoir reprendre un export interrompu. Votre docume
 ## 6. Stabilité des données
 12. Les reviews peuvent-elles être ajoutées, modifiées ou supprimées **pendant** un parcours ?
 13. Le `nbDocs` de `/metrics` est-il calculé exactement avec les mêmes règles que le parcours `/reviews` ? Doit-il
-    être strictement égal au nombre d'`id` uniques récupérés ?
+    être strictement égal au nombre de reviews distinctes récupérées ?
 14. Existe-t-il un mécanisme de **snapshot** pour figer le jeu de données le temps d'un export ?
 
 ## 7. Précisions sur la documentation
