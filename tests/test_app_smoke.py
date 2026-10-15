@@ -19,6 +19,7 @@ import requests  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_TOKEN = "FAKE_app_token_987654"
+FAKE_APP_PASSWORD = "FAKE-mot-de-passe-de-test-tres-long-42"
 LISTS = {
     "/categories": {"categories": [{"category": "fake cat", "subcategories": ["fake sub"]}]},
     "/brands": {"brands": ["FAKE_BRAND"]}, "/countries": {"countries": ["France"]},
@@ -80,6 +81,8 @@ def all_text(at):
 def test_bulk_v2_sans_supabase_message_clair():
     at = AppTest.from_file(str(REPO / "module4_bulk_export_v2.py"), default_timeout=60)
     at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["APP_PASSWORD"] = FAKE_APP_PASSWORD
+    at.session_state["authentifie"] = True
     at.run()
     assert not at.exception, at.exception
     text = all_text(at)
@@ -99,6 +102,8 @@ def test_bulk_v2_monitor_affiche_un_export(pg_conn):
     ss.add_event(pg_conn, export_id, "WARNING", "fake avertissement visible")
     at = AppTest.from_file(str(REPO / "module4_bulk_export_v2.py"), default_timeout=60)
     at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["APP_PASSWORD"] = FAKE_APP_PASSWORD
+    at.session_state["authentifie"] = True
     at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
                                  "db_schema": "bulk_export_test"}
     at.session_state["bv2_tab"] = "Export Monitor"
@@ -120,6 +125,8 @@ def test_bulk_v2_monitor_affiche_un_export(pg_conn):
 def test_application_principale_toutes_les_entrees():
     at = AppTest.from_file(str(REPO / "main_app.py"), default_timeout=60)
     at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["APP_PASSWORD"] = FAKE_APP_PASSWORD
+    at.session_state["authentifie"] = True
     at.run()
     assert not at.exception, at.exception
     nav = at.sidebar.radio[0]
@@ -138,6 +145,8 @@ def test_bulk_v2_estimer_lancer_suivre(pg_conn):
 
     at = AppTest.from_file(str(REPO / "module4_bulk_export_v2.py"), default_timeout=60)
     at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["APP_PASSWORD"] = FAKE_APP_PASSWORD
+    at.session_state["authentifie"] = True
     at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
                                  "db_schema": "bulk_export_test"}
     at.run()
@@ -185,6 +194,8 @@ def test_downloads_et_history(pg_conn, monkeypatch):
     paused = ss.create_export(pg_conn, ExportConfig(name="fake en pause", filters={"brand": "FAKE"}))
     at = AppTest.from_file(str(REPO / "module4_bulk_export_v2.py"), default_timeout=60)
     at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["APP_PASSWORD"] = FAKE_APP_PASSWORD
+    at.session_state["authentifie"] = True
     at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
                                  "db_schema": "bulk_export_test", "supabase_url": "https://fake.supabase.co",
                                  "supabase_service_key": "sb_secret_FAKEkey000111"}

@@ -445,3 +445,49 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
 - ✅ **Après le passage à la clé `service_role` : validation réussie, export COMPLETED** (confirmé par l'utilisateur
   le 15/10/2026). Premier export de bout en bout sur l'infrastructure réelle : collecte → fichiers dans Storage →
   relecture et contrôles → COMPLETED (règle A, 1 doublon tracé, 2 jumelles signalées).
+
+---
+
+## Accès par mot de passe (15/10/2026) — spec « Accès par mot de passe (Streamlit) »
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `auth.py` (nouveau) | Implémentation de référence de la spec : écran « Accès protégé », `hmac.compare_digest` (S2), saisie effacée de la session (S4), blocage 5 min après 5 échecs (S5), « Se déconnecter » dans la barre latérale (F4) |
+| `main_app.py` | `exiger_mot_de_passe()` juste après `st.set_page_config`. **Les modules ne sont importés qu'ensuite** : avant, l'import d'`api_client` créait le client API dès la première ligne. Aucun autre changement. |
+| `module4_bulk_export_v2.py` | Même protection s'il est lancé directement |
+| `tests/test_auth.py` | 11 tests ; tests des pages adaptés (connexion préalable) |
+
+### Renforcements par rapport au code de référence (validés)
+- **Secret vide refusé** (S6) : avec `APP_PASSWORD = ""`, le code de référence laissait entrer une saisie vide.
+- **Secret de moins de 16 caractères refusé** (S7) : l'application ne s'ouvre pas (« Configuration invalide »).
+- Le mot de passe est enregistré comme secret à masquer dans tous les messages et journaux.
+- Le contrôle du secret s'applique aussi à une session déjà connectée : si le secret est retiré, l'accès se ferme.
+
+### Points d'attention
+- **Pas de dossier `pages/`** dans ce dépôt : tout passe par `main_app.py`. Si une page y est ajoutée un jour, elle
+  doit commencer par `st.set_page_config(...)` puis `exiger_mot_de_passe()`.
+- Les modules 1 à 3 gardent leur lancement direct (`streamlit run module3_bulk_export.py`) **sans** mot de passe :
+  la règle n°1 interdit de modifier le module 3. Ce mode n'est pas utilisé sur Streamlit Cloud, dont le fichier
+  principal est `main_app.py`.
+- Un export lancé **continue en arrière-plan** après une déconnexion, comme après la fermeture de l'onglet.
+- Limites de la spec (mot de passe partagé, blocage par session, pas de « se souvenir de moi ») : inchangées.
+
+### Tests automatiques (outil de test de Streamlit)
+| Réf. | Résultat |
+|---|---|
+| T1 / S3 | ✅ Seul l'écran de mot de passe s'affiche, **aucun appel réseau ni connexion à la base**, **aucun module de l'application chargé** (contre-épreuve : si le contrôle est placé après le chargement, le test échoue) |
+| T2 / F3 | ✅ « Mot de passe incorrect. », rien d'autre |
+| T3 / F2 | ✅ Application complète (5 entrées du menu) |
+| T4 / S5 | ✅ Blocage après 5 échecs, qui persiste dans la session |
+| T5 / F5 | ✅ Nouvelle session : mot de passe redemandé |
+| T6 / F4 | ✅ « Se déconnecter » ramène à l'écran de mot de passe |
+| T9 / S6, S7 | ✅ Secret absent ou vide : « Configuration manquante » ; secret trop court : « Configuration invalide » |
+| S2, S4 | ✅ `hmac.compare_digest` ; saisie absente de la session après vérification |
+
+`pytest` : **271 réussis** avec la base de test.
+
+### À vérifier par vous sur l'application déployée
+- [ ] T1 à T6 et T9 à la main.
+- [ ] T7 : sans objet (aucune sous-page).
+- [ ] T8 : commande dans LISEZMOI §0.

@@ -77,6 +77,21 @@ Pour la ligne de commande (plus tard), les mêmes valeurs peuvent être données
 
 Sans ces réglages, la collecte fonctionne, mais l'export reste INCOMPLETE avec le message « Stockage non configuré ».
 
+## 0. Mot de passe d'accès à l'application (15/10/2026)
+Tant que le bon mot de passe n'est pas saisi, l'application n'affiche rien et ne fait ni appel API ni accès à la base.
+1. Générez un mot de passe **d'au moins 16 caractères, aléatoire**, par exemple avec un gestionnaire de mots de passe.
+   En dessous de 16 caractères, l'application refuse de s'ouvrir (« Configuration invalide »).
+2. Streamlit Cloud → votre application → **Settings → Secrets**, ajoutez **en haut du fichier**, avant toute section
+   `[…]` :
+   ```toml
+   APP_PASSWORD = "votre-mot-de-passe-long-et-aleatoire"
+   ```
+   En local : la même ligne dans `.streamlit/secrets.toml` (déjà exclu de Git par `.gitignore`).
+3. Pour changer le mot de passe : modifiez la ligne et enregistrez. L'application redémarre et tout le monde doit
+   saisir le nouveau.
+4. **Vérification T8** (mot de passe absent de GitHub, historique compris), depuis une copie du dépôt :
+   `git log -p --all -S 'une-partie-du-mot-de-passe' | head` ne doit rien afficher.
+
 ## 1 bis. Déployer la page sur Streamlit Cloud (sprint 5)
 1. Dans Streamlit Cloud, ouvrez votre application → **Settings** → **General** (ou créez une application de test),
    puis choisissez la branche **`feature/bulk-export-v2`**. Le fichier principal reste `main_app.py`.

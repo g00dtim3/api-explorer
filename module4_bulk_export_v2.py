@@ -530,4 +530,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Lancement direct de ce fichier : même protection que l'application principale.
+    from auth import exiger_mot_de_passe
+
+    exiger_mot_de_passe()
     main()

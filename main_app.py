@@ -3,25 +3,39 @@ Application principale - Explorateur API Ratings & Reviews
 Point d'entrée avec navigation entre les 3 modules
 """
 import streamlit as st
-from utils import initialize_session_state, display_quotas, display_export_journal
+from auth import exiger_mot_de_passe
 
-# Import des modules
-try:
-    import module1_explorer
-    import module2_manual_export  
-    import module3_bulk_export
-    modules_available = True
-except ImportError as e:
-    st.error(f"❌ Erreur d'import des modules : {e}")
-    modules_available = False
+# Les modules (et donc le client API, qui lit le token dès son import) ne sont chargés qu'APRÈS le
+# contrôle du mot de passe : voir _charger_modules(), appelée dans main() (spec accès, exigence S3).
+modules_available = False
+bulk_v2_available = False
+bulk_v2_error = None
 
-# Bulk Export V2 : chargé à part, pour qu'un problème de ce module n'empêche pas les autres de fonctionner.
-try:
-    import module4_bulk_export_v2
-    bulk_v2_available = True
-except Exception as e:
-    bulk_v2_error = e
-    bulk_v2_available = False
+
+def _charger_modules():
+    """Importe les modules de l'application. Appelée seulement une fois le mot de passe vérifié."""
+    global initialize_session_state, display_quotas, display_export_journal
+    global module1_explorer, module2_manual_export, module3_bulk_export, modules_available
+    global module4_bulk_export_v2, bulk_v2_available, bulk_v2_error
+    from utils import initialize_session_state, display_quotas, display_export_journal
+
+    # Import des modules
+    try:
+        import module1_explorer
+        import module2_manual_export
+        import module3_bulk_export
+        modules_available = True
+    except ImportError as e:
+        st.error(f"❌ Erreur d'import des modules : {e}")
+        modules_available = False
+
+    # Bulk Export V2 : chargé à part, pour qu'un problème de ce module n'empêche pas les autres de fonctionner.
+    try:
+        import module4_bulk_export_v2
+        bulk_v2_available = True
+    except Exception as e:
+        bulk_v2_error = e
+        bulk_v2_available = False
 
 
 def display_navigation():
@@ -170,6 +184,10 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+
+    # Accès par mot de passe : TOUJOURS en premier (rien ne s'exécute avant).
+    exiger_mot_de_passe()
+    _charger_modules()
     
     # Initialisation
     initialize_session_state()
