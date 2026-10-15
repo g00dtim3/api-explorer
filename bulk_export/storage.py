@@ -89,7 +89,12 @@ class SupabaseStorage:
     def _check(resp: requests.Response, what: str, ok=(200, 201, 204)) -> None:
         if resp.status_code not in ok:
             body = (resp.content or b"")[:300].decode("utf-8", errors="replace")
-            raise StorageError(f"{what} : HTTP {resp.status_code} — {body}")
+            hint = ""
+            if "Invalid Compact JWS" in body:
+                # Constaté le 15/10/2026 : Storage refuse les nouvelles clés « sb_secret_… ».
+                hint = (" → Storage n'accepte pas cette clé. Utilisez la clé « service_role » de l'onglet "
+                        "« Legacy API Keys » (elle commence par eyJ…) dans supabase_service_key.")
+            raise StorageError(f"{what} : HTTP {resp.status_code} — {body}{hint}")
 
     # ─── Envoi reprenable (TUS) ──────────────────────────────────────────────
 

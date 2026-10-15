@@ -432,3 +432,13 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
    validé. Supprimez-le depuis History et relancez-le.
 3. Vérifications manuelles du sprint 5 (3 à 5) toujours à faire, idéalement sur un export plus gros.
 4. Sprint 7 : CSV analytique, recette 500 000 mentions, optimisation.
+
+### Premier essai de validation sur Supabase (15/10/2026) — « AV_FR_26 », `exp_20261015T151721Z_d9c8e0f6`
+- Collecte identique au premier essai (3 165 reçues, 3 164 uniques, 1 doublon). **Jumelles : 2** au lieu de 970 : la
+  correction du champ verbatim fonctionne, et ce sont de vrais avis jumeaux.
+- **Validation FAILED** à l'envoi du premier lot : `HTTP 400 — 403 AccessDenied — Invalid Compact JWS`. Cause :
+  la clé utilisée est une nouvelle clé `sb_secret_…`, que l'envoi par morceaux de Supabase Storage n'accepte pas
+  (il attend un jeton JWT). **Correction** : utiliser la clé `service_role` de l'onglet « Legacy API Keys »
+  (LISEZMOI §1.6 mis à jour). Le message d'erreur l'indique maintenant directement.
+- Aucune donnée perdue : les mentions sont restées en base. Après le changement de clé, il suffit de cliquer sur
+  **Valider**.

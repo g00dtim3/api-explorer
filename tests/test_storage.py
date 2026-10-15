@@ -141,3 +141,15 @@ def test_stockage_local_refuse_les_chemins_hors_dossier(tmp_path):
     s = LocalStorage(tmp_path / "store")
     with pytest.raises(StorageError):
         s.upload_file(__file__, "../evasion.txt", "text/plain")
+
+
+def test_cle_refusee_message_explicatif(tmp_path):
+    class Refus:
+        def request(self, method, url, **kw):
+            return Resp(400, body=b'{"statusCode":"403","code":"AccessDenied","message":"Invalid Compact JWS"}')
+
+    src = tmp_path / "f.bin"
+    src.write_bytes(b"abc")
+    with pytest.raises(StorageError) as info:
+        storage(Refus()).upload_file(src, "a", "text/plain")
+    assert "service_role" in str(info.value) and FAKE_KEY not in str(info.value)

@@ -68,8 +68,9 @@ Pour la ligne de commande (plus tard), les mêmes valeurs peuvent être données
 1. **Storage → New bucket** : nom `bulk-exports`, **Public bucket : désactivé** (bucket privé).
 2. **Storage → Settings** (ou *Project Settings → Storage*) : **Upload file size limit** à **1 GB**. La limite par
    défaut (50 Mo) est trop faible pour le CSV d'un export de 500 000 mentions (≈ 0,5 Go).
-3. **Project Settings → API Keys** : copiez la clé **secrète**, soit l'ancienne `service_role` (commence par `eyJ…`),
-   soit la nouvelle `sb_secret_…`. Copiez aussi l'adresse du projet (`https://<projet>.supabase.co`).
+3. **Project Settings → API Keys → onglet « Legacy API Keys »** : copiez la clé **`service_role`** (elle commence par
+   `eyJ…`). ⚠️ **Pas la nouvelle clé `sb_secret_…`** : constaté le 15/10/2026, Supabase Storage la refuse pour l'envoi
+   des fichiers (erreur « Invalid Compact JWS »). Copiez aussi l'adresse du projet (`https://<projet>.supabase.co`).
 4. Dans les secrets Streamlit, section `[bulk_export]` : `supabase_url`, `supabase_service_key`,
    `storage_bucket = "bulk-exports"`.
    ⚠️ Cette clé donne tous les droits sur le projet : **uniquement dans les secrets**, jamais dans le code ni dans Git.
