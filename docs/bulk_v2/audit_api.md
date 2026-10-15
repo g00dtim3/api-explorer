@@ -8,6 +8,7 @@
 > - **documenté** : écrit dans la documentation du fournisseur (engagement écrit, mais pas encore vérifié en pratique) ;
 > - **constaté** : observé dans le code existant ou lors d'un appel réel (petit volume, non garanti) ;
 > - **confirmé par le fournisseur** : réponse explicite à nos questions (`questions_fournisseur.md`) ;
+> - **indiqué par l'utilisateur** : information donnée par l'utilisateur, à partir de son usage réel de l'API ;
 > - **inconnu** : ni documenté, ni observé. **Le moteur devra rendre ces points configurables** (règle n°10).
 >
 > Aucune valeur n'a été inventée. Le script `scripts/audit_api.py` n'a pas été écrit (décision du 14/10/2026).
@@ -52,14 +53,14 @@ Dans l'exemple de la documentation :
 | # | Point | Valeur | Statut |
 |---|---|---|---|
 | 1 | Taille de page maximale `rows` | **1 000** (c'est aussi la valeur par défaut) | documenté |
-| 2 | Champ identifiant natif | **`id`** (chaîne) | documenté (cohérent avec le code : `module3_bulk_export.py:427`) |
-| 3 | `id` présent sur 100 % des mentions ? Unique ? Permanent ? | — | **inconnu** |
+| 2 | Champ identifiant natif | Un champ **`id`** (chaîne) figure dans la documentation, mais **l'API ne fournit pas d'identifiant fiable pour un verbatim** | documenté (champ) · non fiable : **indiqué par l'utilisateur** (15/10/2026) |
+| 3 | Clé d'unicité retenue | Empreinte SHA-256 des champs source, méthode du projet Compass | **proposition** : `decision_identifiant.md` |
 | 4 | Paramètre et format du curseur | Le curseur se passe dans `nextCursorMark` (curseur de départ `*`, selon le code) et revient dans `result.nextCursorMark`. Il fonctionne aussi en mode `random`. | documenté (paramètre et réponse) · constaté dans le code (`*`) |
 | 5 | **Signal de fin de pagination** | Non décrit : curseur identique, page vide ou champ absent ? | **inconnu** |
 | 6 | Ordre des résultats stable entre deux parcours ? | Non décrit (sans `random`) | **inconnu** |
 | 7 | Durée de validité d'un curseur (reprise après plusieurs heures) | Non décrit | **inconnu** |
-| 8 | Décompte du quota | **Seul `/reviews` consomme du quota, à raison du nombre de mentions effectivement renvoyées.** `/metrics` et `/quotas` sont gratuits. | documenté |
-| 9 | Une page relue (nouvelle tentative, reprise) est-elle décomptée à nouveau ? | D'après la règle du point 8, **oui** dès qu'une réponse contenant des mentions est renvoyée. Non documenté pour une réponse en erreur. | documenté par déduction · cas d'erreur **inconnu** |
+| 8 | Décompte du quota | Seul `/reviews` consomme du quota (documenté). **Le compte n'a plus de limite de quota** : exports illimités. | documenté · **indiqué par l'utilisateur** (15/10/2026) |
+| 9 | Coût d'une page relue (nouvelle tentative, reprise) | Sans objet tant que le quota est illimité | — |
 | 10 | Limites de débit, réponse 429, `Retry-After` | Non décrit | **inconnu** |
 | 11 | Format des erreurs (codes HTTP, valeur de `status` ≠ `success`) | Non décrit | **inconnu** |
 | 12 | `nbDocs` de `/metrics` = nombre réellement paginable par `/reviews` ? | Les deux renvoient `nbDocs` pour les mêmes filtres. L'égalité avec le nombre d'IDs récupérés n'est pas garantie. | documenté (champ) · égalité **inconnue** |
@@ -83,9 +84,7 @@ Dans l'exemple de la documentation :
 
 ### Ce qui est certain (calcul direct à partir de la documentation)
 - **Nombre minimal d'appels `/reviews`** : 500 000 / 1 000 = **500 pages**.
-- **Quota consommé au minimum : 500 000 mentions.** Chaque reprise ou nouvelle tentative d'une page déjà reçue reconsomme jusqu'à 1 000 mentions.
-  ➡️ **Avant de lancer un export, il faut vérifier `remaining volume ≥ nbDocs` (plus une marge).** Sinon, l'export s'arrêtera en cours de route. L'exemple de la documentation montre un quota de 100 000 : si c'est l'ordre de grandeur réel, **un export de 500 000 est impossible** sans augmentation du quota. **À vérifier avec `/quotas`.**
-- Le moteur doit **éviter de relire une page déjà sécurisée** : c'est une raison de plus pour enregistrer le point de reprise juste après chaque page.
+- **Quota** : le compte n'a plus de limite (indiqué par l'utilisateur). Le contrôle « quota restant ≥ volume attendu » n'est **pas bloquant**. On garde l'affichage de `/quotas` à titre d'information, et un **avertissement** (pas un blocage) si l'API renvoie un jour un quota restant inférieur au volume attendu. Le moteur évite quand même de relire une page déjà sécurisée (économie de temps).
 
 ### Ce qui reste à mesurer
 Taille réelle d'une mention et temps de réponse : **inconnus**. Formules à appliquer dès qu'une première page réelle aura été lue (sprint 1, mesure automatique dans le journal d'export) :
@@ -113,4 +112,4 @@ Puisque la documentation ne décrit pas la fin, le moteur appliquera ceci, en at
 Quelle que soit la façon dont la boucle s'arrête, **COMPLETED n'est attribué qu'après validation** : nombre d'IDs uniques = `nbDocs`. Sinon, le statut est INCOMPLETE (règle n°5).
 
 ## 6. Points à faire confirmer
-Voir `questions_fournisseur.md` : points 3, 5, 6, 7, 9 (cas d'erreur), 10, 11, 12, 13 et écarts A, B, C.
+Voir `questions_fournisseur.md` : points 5, 6, 7, 10, 11, 12, 13 et écarts A, B, C.

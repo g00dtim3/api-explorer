@@ -28,10 +28,11 @@
 4. 🟠 `pandas>=2.0.0` sans borne haute ; pandas 3 supprime `applymap` (modules 2 et 3). À décider : figer la
    version ou laisser en l'état (hors périmètre « ne pas modifier le module 3 »).
 5. 🟠 `postprocess_reviews()` : réservé au format analytique ; lecture des attributs fragile, perte du jour de la date.
-6. 🔴 **Quota** : seul `/reviews` consomme du quota, au nombre de mentions renvoyées. Un export de 500 000 en
-   consomme au moins 500 000, et chaque relecture de page reconsomme. Il faut vérifier le quota réel (`/quotas`) :
-   l'exemple de la documentation montre 100 000. Le contrôle « quota restant ≥ volume attendu » sera obligatoire
-   avant tout lancement.
+6. ✅ **Quota** : réglé. Le compte n'a plus de limite (indiqué par l'utilisateur le 15/10/2026). Simple avertissement, pas de blocage.
+9. 🔴 **Identifiant** : l'API ne fournit pas d'identifiant fiable (indiqué par l'utilisateur). Proposition, reprise du
+   projet Compass (`g00dtim3/mvp_verbatim_import`, `core/hasher.py`) : deux empreintes SHA-256 (`content_key` et
+   `raw_hash`), voir `decision_identifiant.md`. **En attente de validation**, avec la modification de la règle n°6 de
+   `CLAUDE.md` et le choix de la date (jour ou mois).
 7. Inconnus à faire confirmer : signal de fin, ordre stable, validité du curseur, limites de débit / `Retry-After`,
    format des erreurs, stabilité des données, unicité de `id`, format des dates (`YYYY-DD-MM` dans le texte,
    `YYYY-MM-DD` dans les exemples), liste à jour des champs.
@@ -40,11 +41,12 @@
 
 ### Définition de terminé du sprint 0
 - [x] `audit_code.md` et `audit_api.md` existent et sont lisibles par un non-développeur.
-- [~] Champ ID natif identifié : `id` (documenté). Présence sur 100 % des mentions : **non vérifiée**.
+- [~] Champ ID natif : `id` documenté mais **non fiable**. Clé d'unicité par empreinte proposée (`decision_identifiant.md`), à valider.
 - [~] Règle de fin de pagination : **non documentée**. Règle provisoire configurable proposée.
 - [x] Liste complète des transformations de `postprocess_reviews()`.
 - [ ] Estimation chiffrée de l'espace et de la durée : **impossible sans mesure réelle**. Formules prêtes, mesure au sprint 1.
 - [x] Aucun token ni mention réelle commité.
 
 ### Action humaine
-- Envoyer `questions_fournisseur.md` au fournisseur ; vérifier le quota réel dans l'onglet quotas de l'application.
+- Envoyer `questions_fournisseur.md` au fournisseur.
+- Valider `decision_identifiant.md` (option de date A ou B, nouvelle règle n°6).

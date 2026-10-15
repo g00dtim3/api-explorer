@@ -1,7 +1,8 @@
 # Questions au fournisseur de l'API Ratings & Reviews
 
 > Version du 15/10/2026, établie à partir de la documentation « Description de l'API Rating&Reviews pour Pierre Fabre v2.0 » (mars 2025).
-> Les points déjà couverts par cette documentation ont été retirés (taille maximale de `rows`, endpoints qui consomment du quota).
+> Les points déjà couverts par cette documentation ont été retirés (taille maximale de `rows`, endpoints qui consomment du quota),
+> ainsi que les questions de quota (compte sans limite depuis le 15/10/2026). Numérotation conservée.
 > La question « Hébergement » de la spec §10 est retirée : elle est réglée par `ADAPTATION_SUPABASE.md`.
 > Une fois les réponses reçues, les reporter dans `audit_api.md` avec le statut « confirmé par le fournisseur ».
 
@@ -26,18 +27,18 @@ perdue ni dupliquée, et de pouvoir reprendre un export interrompu. Votre docume
 
 ## 2. Identifiant
 6. Le champ `id` est-il **toujours présent**, **unique** et **permanent** (il ne change jamais pour une même review) ?
+   *(Nous avons constaté qu'il n'est pas exploitable comme identifiant. Une réponse positive nous permettrait de simplifier notre traitement.)*
 
 ## 3. Champs renvoyés
 7. La documentation liste le champ `verbatim content`. Nous observons dans notre code les champs `content trad` et
    `content origin`. Quelle est la **liste à jour** des champs renvoyés par `/reviews` ? Des champs peuvent-ils être
    ajoutés sans préavis ?
 
-## 4. Quotas et débit
-8. Une requête `/reviews` qui **échoue** (erreur serveur, coupure réseau, délai dépassé) est-elle décomptée du quota ?
+## 4. Débit
+8. *(retirée : quota illimité)*
 9. Quelles **limites de débit** s'appliquent (nombre d'appels par seconde ou par minute) ? En cas de dépassement,
    quel code HTTP est renvoyé, et la réponse contient-elle un en-tête `Retry-After` ?
-10. Un export de 500 000 reviews consomme au moins 500 000 du quota. Quel est le **quota réel** de notre compte,
-    et peut-il être augmenté ponctuellement ?
+10. *(retirée : quota illimité)*
 
 ## 5. Erreurs
 11. Quels **codes HTTP** et quelles valeurs de `status` (autres que `"success"`) l'API peut-elle renvoyer, et sous quel format ?
