@@ -1,43 +1,63 @@
 # Questions au fournisseur de l'API Ratings & Reviews
 
-> Brouillon du 14/10/2026. À affiner avec les mesures de `audit_api.md` avant envoi.
+> Version du 15/10/2026, établie à partir de la documentation « Description de l'API Rating&Reviews pour Pierre Fabre v2.0 » (mars 2025).
+> Les points déjà couverts par cette documentation ont été retirés (taille maximale de `rows`, endpoints qui consomment du quota).
 > La question « Hébergement » de la spec §10 est retirée : elle est réglée par `ADAPTATION_SUPABASE.md`.
+> Une fois les réponses reçues, les reporter dans `audit_api.md` avec le statut « confirmé par le fournisseur ».
+
+---
 
 Bonjour,
 
-Nous préparons un export complet (jusqu'à 500 000 mentions par opération) via `/reviews` avec pagination
-par `nextCursorMark`. Pour garantir qu'aucune mention n'est perdue ni dupliquée, pourriez-vous nous confirmer
-les points suivants ?
+Nous préparons un export complet (jusqu'à 500 000 reviews par opération) via `GET /reviews`, avec `rows=1000` et la
+pagination par `nextCursorMark`, **sans** le paramètre `random`. Notre objectif est de garantir qu'aucune review n'est
+perdue ni dupliquée, et de pouvoir reprendre un export interrompu. Votre documentation v2.0 (mars 2025) nous a
+été très utile. Pourriez-vous nous préciser les points suivants ?
 
 ## 1. Pagination
-- Le parcours par `nextCursorMark` (curseur initial `*`) est-il garanti de renvoyer **toutes** les mentions
-  correspondant aux filtres, chacune **une seule fois** ?
-- Quel est l'**ordre** de tri utilisé ? Est-il stable entre deux parcours identiques ?
-- Quel est le **signal officiel de fin** : un `nextCursorMark` identique à celui envoyé, une page vide,
-  l'absence du champ, ou autre ?
-- Quelle est la **valeur maximale** autorisée pour `rows` ?
-- Un curseur a-t-il une **durée de validité** ? Peut-on reprendre un parcours plusieurs heures plus tard
-  avec un curseur déjà reçu ?
-- Le paramètre `random` est-il compatible avec la pagination par curseur ?
+1. Un parcours complet par `nextCursorMark` (en commençant par `*`) renvoie-t-il bien **toutes** les reviews
+   correspondant aux filtres, **chacune une seule fois** ?
+2. Quel est le **signal officiel de fin** de parcours : un `nextCursorMark` identique à celui envoyé, une liste `docs`
+   vide, l'absence du champ `nextCursorMark`, ou autre ?
+3. Sans `random`, l'**ordre** des résultats est-il stable entre deux parcours identiques ? Sur quel critère de tri ?
+4. Un `nextCursorMark` reste-t-il **valable dans le temps** ? Peut-on reprendre un parcours plusieurs heures,
+   ou plusieurs jours, plus tard avec un curseur déjà reçu ?
+5. Y a-t-il une limite au nombre total de reviews accessibles par un même parcours ?
 
 ## 2. Identifiant
-- Le champ `id` est-il **unique et permanent** pour une mention ? Peut-il être absent ?
+6. Le champ `id` est-il **toujours présent**, **unique** et **permanent** (il ne change jamais pour une même review) ?
 
-## 3. Volumétrie
-- Avez-vous une estimation de la taille moyenne d'une mention complète (tous champs) ?
+## 3. Champs renvoyés
+7. La documentation liste le champ `verbatim content`. Nous observons dans notre code les champs `content trad` et
+   `content origin`. Quelle est la **liste à jour** des champs renvoyés par `/reviews` ? Des champs peuvent-ils être
+   ajoutés sans préavis ?
 
-## 4. Quotas
-- Comment le quota est-il décompté : par appel, par mention renvoyée, par volume ?
-- Une page relue (nouvelle tentative après erreur, reprise après interruption) est-elle **décomptée à nouveau** ?
-- Quelles limites de débit s'appliquent (appels par seconde / minute) ? La réponse 429 contient-elle `Retry-After` ?
+## 4. Quotas et débit
+8. Une requête `/reviews` qui **échoue** (erreur serveur, coupure réseau, délai dépassé) est-elle décomptée du quota ?
+9. Quelles **limites de débit** s'appliquent (nombre d'appels par seconde ou par minute) ? En cas de dépassement,
+   quel code HTTP est renvoyé, et la réponse contient-elle un en-tête `Retry-After` ?
+10. Un export de 500 000 reviews consomme au moins 500 000 du quota. Quel est le **quota réel** de notre compte,
+    et peut-il être augmenté ponctuellement ?
 
-## 5. Stabilité des données
-- Les mentions peuvent-elles être ajoutées, modifiées ou supprimées **pendant** un parcours ?
-- Le nombre `nbDocs` de `/metrics` est-il calculé exactement avec les mêmes règles que `/reviews` ?
-- Existe-t-il un mécanisme de **snapshot** (figer le jeu de données le temps de l'export) ?
+## 5. Erreurs
+11. Quels **codes HTTP** et quelles valeurs de `status` (autres que `"success"`) l'API peut-elle renvoyer, et sous quel format ?
 
-## 6. Sécurité
-- Est-il possible de passer le token dans un **en-tête HTTP** plutôt que dans l'adresse ?
-  (Cela éviterait qu'il apparaisse dans des journaux techniques.)
+## 6. Stabilité des données
+12. Les reviews peuvent-elles être ajoutées, modifiées ou supprimées **pendant** un parcours ?
+13. Le `nbDocs` de `/metrics` est-il calculé exactement avec les mêmes règles que le parcours `/reviews` ? Doit-il
+    être strictement égal au nombre d'`id` uniques récupérés ?
+14. Existe-t-il un mécanisme de **snapshot** pour figer le jeu de données le temps d'un export ?
+
+## 7. Précisions sur la documentation
+15. **Format des dates** `start-date` / `end-date` : le texte indique `YYYY-DD-MM`, mais les exemples utilisent
+    `YYYY-MM-DD` (ex. `2024-06-30`). Lequel est le bon ? Les bornes sont-elles **incluses** ? À quelle date de la
+    review s'appliquent-elles, et dans quel fuseau horaire ?
+16. **Valeurs multiples** : la page 2 indique qu'un filtre ne peut contenir qu'une seule valeur, la page 3 décrit des
+    valeurs multiples séparées par des virgules. Pouvez-vous confirmer que les valeurs multiples sont acceptées ?
+    Comment filtrer une valeur qui contient elle-même une virgule ?
+
+## 8. Sécurité
+17. Est-il possible de transmettre le token dans un **en-tête HTTP** plutôt que dans l'adresse ? Cela éviterait
+    qu'il apparaisse dans des journaux techniques.
 
 Merci d'avance,

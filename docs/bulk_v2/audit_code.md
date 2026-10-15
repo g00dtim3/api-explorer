@@ -160,6 +160,10 @@ Utilisée uniquement pour le bouton « Format plat ». Chaque étape, dans l'ord
 | 14 | Réordonnancement des colonnes | Colonnes d'origine, puis `attribute_*`, puis `safety` | Acceptable analytique |
 | 15 | (au moment du téléchargement) séparateur `;` et encodage `utf-8-sig` | | Acceptable analytique |
 
+> ⚠️ **Écart avec la documentation de l'API** (voir `audit_api.md` §3, écart C) : la documentation v2.0 liste un champ
+> `verbatim content`, et non `content trad` / `content origin`. Si l'API renvoie `verbatim content`, les étapes 3 et 7
+> n'ont aucun effet : le verbatim garde alors son nom d'origine. Il faudra vérifier sur une vraie réponse quels champs existent.
+
 **Conclusion :** `postprocess_reviews()` ne doit **jamais** toucher les JSONL ni le CSV de référence. En V2, on peut la réutiliser **uniquement** pour le format analytique dérivé (spec §6.2, « CSV plat », P1), et seulement après avoir corrigé deux points : la lecture des attributs (#11, qui dépend de la conversion `str()`) et la date (#5, perte du jour à afficher clairement).
 Elle utilise aussi `iterrows()`, très lent sur de gros volumes. Elle devra donc tourner **lot par lot** et non sur 500 000 lignes d'un coup.
 
