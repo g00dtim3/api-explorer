@@ -56,17 +56,17 @@ Dans l'exemple de la documentation :
 | 2 | Champ identifiant natif | `id` (chaîne) est **présent mais pas fiable** : il est généré au moment de l'export, et les mêmes valeurs se retrouvent d'un export à l'autre | documenté (champ) · **indiqué par l'utilisateur** (15/10/2026) |
 | 3 | Clé d'unicité retenue | Empreintes SHA-256 des champs source (`raw_hash` sans `id`, `content_key`, `compass_id`) | **validé** : `decision_identifiant.md` |
 | 4 | Paramètre et format du curseur | Le curseur se passe dans `nextCursorMark` (curseur de départ `*`, selon le code) et revient dans `result.nextCursorMark`. Il fonctionne aussi en mode `random`. | documenté (paramètre et réponse) · constaté dans le code (`*`) |
-| 5 | **Signal de fin de pagination** | Non décrit : curseur identique, page vide ou champ absent ? | **inconnu** |
+| 5 | **Signal de fin de pagination** | Après la dernière page (165 mentions), l'API renvoie une **page vide avec le même curseur** que celui envoyé : c'est la « fin normale » de la règle retenue, sans avertissement | constaté le 15/10/2026, export réel `exp_20261015T130315Z_0d8b9e65` (3 165 mentions) · non confirmé par le fournisseur |
 | 6 | Ordre des résultats stable entre deux parcours ? | Non décrit (sans `random`) | **inconnu** |
 | 7 | Durée de validité d'un curseur (reprise après plusieurs heures) | Non décrit | **inconnu** |
 | 8 | Décompte du quota | Seul `/reviews` consomme du quota (documenté). **Le compte n'a plus de limite de quota** : exports illimités. | documenté · **indiqué par l'utilisateur** (15/10/2026) |
 | 9 | Coût d'une page relue (nouvelle tentative, reprise) | Sans objet tant que le quota est illimité | — |
 | 10 | Limites de débit, réponse 429, `Retry-After` | Non décrit | **inconnu** |
 | 11 | Format des erreurs (codes HTTP, valeur de `status` ≠ `success`) | Non décrit | **inconnu** |
-| 12 | `nbDocs` de `/metrics` = nombre réellement paginable par `/reviews` ? | Les deux renvoient `nbDocs` pour les mêmes filtres. L'égalité avec le nombre d'IDs récupérés n'est pas garantie. | documenté (champ) · égalité **inconnue** |
+| 12 | `nbDocs` de `/metrics` = nombre réellement paginable par `/reviews` ? | **Égalité observée** : 3 165 annoncées, 3 165 reçues. Une paire de mentions identiques sur tous les champs sauf `id` (même page) : 3 164 distinctes | constaté le 15/10/2026, export réel `exp_20261015T130315Z_0d8b9e65` (3 165 mentions) · garantie **inconnue** |
 | 13 | Jeu de données stable pendant un export / snapshot | Non décrit | **inconnu** |
-| 14 | Temps de réponse par page | Non décrit | **inconnu** (à mesurer pendant le sprint 1) |
-| 15 | Taille moyenne d'une mention (brute et gzip) | L'exemple de la documentation n'est pas représentatif (verbatim de quelques mots) | **inconnu** (voir §4) |
+| 14 | Temps de réponse par page | **1,3 à 1,8 s** pour une page de 1 000 ; environ **3,5 à 4 s** entre deux pages enregistrées (lecture + tri + écriture dans Supabase) | constaté le 15/10/2026, export réel `exp_20261015T130315Z_0d8b9e65` (3 165 mentions) |
+| 15 | Taille moyenne d'une mention (brute et gzip) | **≈ 1,0 à 1,24 Ko** de JSON par mention (réponses de 1,03 à 1,24 Mo pour 1 000) ; gzip non mesuré | constaté le 15/10/2026, export réel `exp_20261015T130315Z_0d8b9e65` (3 165 mentions) |
 
 ## 3. Contradictions et écarts relevés
 
@@ -74,7 +74,7 @@ Dans l'exemple de la documentation :
 |---|---|---|
 | A | **Format de date des filtres** : le texte dit `YYYY-DD-MM`, mais tous les exemples utilisent `YYYY-MM-DD` (`2024-06-30` : le « 30 » ne peut pas être un mois). | Suivre les exemples (`YYYY-MM-DD`, ce que fait déjà l'application) et **poser la question**. Le format envoyé sera enregistré dans la configuration figée. |
 | B | **Une ou plusieurs valeurs par filtre** : la page 2 dit « chaque filtre ne peut comprendre qu'une seule valeur », la page 3 décrit les valeurs multiples séparées par des virgules. | La page 3 est plus précise et c'est ce que fait l'application. À confirmer. Une valeur contenant elle-même une virgule serait ambiguë. |
-| C | **Noms des champs du verbatim** : la documentation liste `verbatim content`, mais `postprocess_reviews()` attend `content trad` et `content origin`, qui ne figurent pas dans la documentation. | La documentation (mars 2025) est peut-être plus ancienne que le code (juillet 2025). **Le moteur V2 ne doit supposer aucune liste figée de champs** : il garde chaque mention telle quelle et seul `id` est obligatoire. La liste réelle sera relevée sur la première page d'un vrai export. |
+| C | **Noms des champs du verbatim** : la documentation liste `verbatim content`, mais `postprocess_reviews()` attend `content trad` et `content origin`, qui ne figurent pas dans la documentation. | La documentation (mars 2025) est peut-être plus ancienne que le code (juillet 2025). **Le moteur V2 ne doit supposer aucune liste figée de champs** : il garde chaque mention telle quelle et seul `id` est obligatoire. La liste réelle sera relevée sur la première page d'un vrai export. **Constaté le 15/10/2026 : `content trad` et `content origin` sont présents, `verbatim content` est absent.** Champs reçus : attributes, attributes negative, attributes positive, brand, business indicator, category, content origin, content trad, country, date, id, opinion, product, rating, source, subcategory. |
 | D | `market` est un filtre, mais n'apparaît pas dans les champs d'une mention. | Rien à faire pour les données brutes. À savoir pour l'analyse. |
 | E | `/metrics` accepte aussi `random`, `rows` et `nextCursorMark` (sans effet documenté). | Le moteur appellera `/metrics` **uniquement avec les filtres**, comme le code actuel. |
 | F | La documentation écrit une fois « newtCursorMark » (faute de frappe). | Aucune. |

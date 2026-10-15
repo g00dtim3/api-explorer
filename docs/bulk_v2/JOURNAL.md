@@ -338,3 +338,29 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
 1. Les 5 vérifications ci-dessus, et la ligne « Champs reçus » du premier export réel.
 2. Downloads (fichiers CSV / JSONL / ZIP, manifeste) et validation (COMPLETED) : sprint 6.
 3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).
+
+### Premier export réel (15/10/2026) — « Avene - FR - 26 », `exp_20261015T130315Z_0d8b9e65`
+| Mesure | Valeur |
+|---|---|
+| Attendues (`/metrics`) / reçues / uniques | 3 165 / 3 165 / 3 164 |
+| Doublons / jumelles / rejetées | 1 / 970 / 0 |
+| Pages | 5 (4 avec données + 1 page vide de fin, même curseur) |
+| Durée | 23 s, soit ≈ 3,5 à 4 s par page enregistrée |
+| Statut | INCOMPLETE : **normal**, la validation (→ COMPLETED) arrive au sprint 6 |
+
+**Ce que cet export a appris :**
+1. **Champs réels** : `content trad` et `content origin` sont présents, `verbatim content` est absent. La documentation
+   fournisseur est en retard sur l'API.
+2. 🔴 **Les 970 « jumelles » sont un faux signal.** `content_key` utilise par défaut le champ `verbatim content`, qui
+   n'existe pas : le verbatim compte comme vide, et des avis différents (même marque, jour, produit, pays, source et
+   note) sont donc pris pour des jumeaux. **Aucune donnée n'est perdue ni mal enregistrée** : la clé d'unicité
+   (`raw_hash`) porte sur la mention complète. Correction à faire : `verbatim_field = "content trad"` par défaut, et
+   valeurs par défaut écrites dans la configuration figée (traçabilité).
+3. **Fin de pagination** : page vide avec le même curseur, conforme à la règle retenue, sans avertissement.
+4. **1 doublon** : deux mentions identiques sur tous les champs sauf `id`, dans la même page. Il est impossible de dire
+   si c'est une répétition de l'API ou deux avis réellement distincts. C'est la limite assumée de
+   `decision_identifiant.md`. Conséquence : 3 164 uniques pour 3 165 annoncées. À trancher pour la validation
+   (sprint 6).
+5. Aucun `id` API porté par deux mentions différentes dans cet export : pas d'alerte.
+6. Mesures pour 500 000 mentions : ≈ 500 pages × 3,5 à 4 s ≈ **30 à 35 min** ; ≈ **0,5 à 0,6 Go** de JSON brut
+   pendant la collecte (hors index et compression Postgres).
