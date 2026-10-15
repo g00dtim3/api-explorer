@@ -74,14 +74,23 @@ Correspondance (Compass lit le CSV plat produit par `postprocess_reviews()`) :
 | source | `source` (vide → `""`) | `source` |
 | rating | `rating` converti en entier 1–5, sinon `""` | `rating` |
 
-⚠️ **À vérifier sur une vraie réponse (sprint 1)** : la documentation API nomme le verbatim `verbatim content`, alors que
-le format plat renomme `content trad`. Si l'API renvoie `verbatim content`, le format plat actuel ne crée **pas**
-de colonne `verbatim_content`, et Compass hache alors un verbatim vide. `compass_id` reproduira **le comportement
-réel de Compass**, même vide, et la situation sera signalée.
+Points vérifiés au sprint 1 (15/10/2026), en faisant passer de fausses mentions par la chaîne réelle
+(format plat de l'application, puis lecture et calcul par le code Compass) :
+- ✅ `compass_id` est **identique** à l'`id` Compass sur 3 fausses mentions choisies pour piéger le calcul
+  (accents, `&`, `;`, retours à la ligne, note et source vides, verbatim « NA » que pandas lit comme vide).
+  Ces valeurs servent de référence dans `tests/test_fingerprints.py`.
+- ✅ Correction : si le champ `content trad` est absent, Compass **refuse le fichier entier** (colonne
+  `verbatim_content` obligatoire). Il ne calcule donc pas un verbatim vide. `compass_id` vaut alors `None`.
+- ⚠️ **Découverte : Compass ne peut pas lire tel quel le format plat de l'application.** Compass exige une colonne
+  `sampling` (minuscule), alors que `postprocess_reviews()` produit `Sampling` (majuscule). Pour le test, la colonne a
+  été renommée. **Question ouverte :** le fichier que Compass importe vient-il vraiment du « format plat » de
+  l'application, éventuellement retouché à la main, ou d'un autre export Semantiweb ? Si ce fichier contient la
+  **date au jour**, `compass_id` devrait utiliser le jour et non le 1er du mois. C'est un réglage à changer, pas du
+  code à réécrire, mais il faut le savoir avant de relier les deux projets.
 
-Garanties prévues dans les sprints suivants :
-- un test qui compare `compass_id` avec la fonction `verbatim_hash` de Compass (copie figée de la référence, avec des données `fake_*`) ;
-- la correspondance des champs est **réglable**, et le champ verbatim utilisé est inscrit dans le manifeste.
+Toujours à vérifier sur une vraie réponse : le nom réel du champ verbatim (`verbatim content` ou `content trad`).
+Les deux champs utilisés sont **réglables** (`verbatim_field`, `compass_verbatim_field`), figés dans la configuration
+de chaque export, et seront inscrits dans le manifeste (sprint 6).
 
 ## 5. Règle n°6 de `CLAUDE.md` (nouvelle rédaction)
 > **6. Pas d'identifiant inventé** (compteur, UUID, numéro de ligne). Le champ `id` de l'API n'est pas fiable (régénéré
