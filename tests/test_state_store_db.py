@@ -45,11 +45,11 @@ def running_export(conn, owner="fake-owner") -> str:
 # ─── Migration ────────────────────────────────────────────────────────────────
 
 def test_migration_rejouable(pg_conn):
-    db.apply_migration(pg_conn, schema=TEST_SCHEMA)
-    db.apply_migration(pg_conn, schema=TEST_SCHEMA)
+    db.apply_all_migrations(pg_conn, schema=TEST_SCHEMA)
+    db.apply_all_migrations(pg_conn, schema=TEST_SCHEMA)
     tables = {r[0] for r in pg_conn.execute(
         "SELECT tablename FROM pg_tables WHERE schemaname = %s", (TEST_SCHEMA,)).fetchall()}
-    assert tables == {"exports", "pages", "raw_mentions", "conflicts", "events", "files"}
+    assert tables == {"exports", "pages", "raw_mentions", "conflicts", "events", "files", "rejected_mentions"}
 
 
 def test_rls_active_sur_toutes_les_tables(pg_conn):
@@ -61,8 +61,9 @@ def test_rls_active_sur_toutes_les_tables(pg_conn):
                            (TEST_SCHEMA,)).fetchone()[0] == 0
 
 
-def test_migration_ne_touche_que_son_schema():
-    sql = db.migration_sql(schema=TEST_SCHEMA)
+@pytest.mark.parametrize("name", db.migration_names())
+def test_migration_ne_touche_que_son_schema(name):
+    sql = db.migration_sql(name, schema=TEST_SCHEMA)
     assert "bulk_export." not in sql.replace(f"{TEST_SCHEMA}.", "")
 
 

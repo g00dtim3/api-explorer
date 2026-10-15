@@ -31,6 +31,12 @@
 
 Le script peut être relancé sans danger : il ne recrée pas ce qui existe déjà et n'efface rien.
 
+**Scripts suivants**, à exécuter de la même façon, dans l'ordre, une seule fois chacun :
+
+| Script | Ajouté au | Ce qu'il crée | Vérification |
+|---|---|---|---|
+| `bulk_export/migrations/002_rejected.sql` | sprint 3 | Table `rejected_mentions` : mentions rejetées (ex. sans date), gardées telles quelles | 7 tables dans le schéma `bulk_export` |
+
 ### 1.4 Ne PAS exposer le schéma dans l'API publique
 Dans *Project Settings → Data API* (ou *API*), la liste **Exposed schemas** ne doit **pas** contenir `bulk_export`.
 Par défaut, elle ne contient que `public` et `graphql_public` : n'y touchez pas.

@@ -53,3 +53,42 @@ def page(docs, cursor, nb=None):
 def conn_error():
     # Le message d'une vraie erreur requests contient l'adresse, donc le token.
     return requests.ConnectionError(f"Max retries exceeded with url: /reviews?token={FAKE_TOKEN}")
+
+
+class FakePagedServer:
+    """Faux serveur /metrics + /reviews paginé par curseur, comme l'API réelle (supposée).
+
+    ``pages`` : liste de listes de mentions. Le curseur de la page i est "*" puis "C1", "C2"…
+    Après la dernière page, l'API renvoie une page vide avec le même curseur (fin normale).
+    ``failures`` : {(chemin, curseur): [réponses ou exceptions à servir avant la vraie réponse]}.
+    """
+
+    def __init__(self, pages, nb_docs=None, failures=None):
+        self.pages = pages
+        self.nb_docs = nb_docs if nb_docs is not None else sum(len(p) for p in pages)
+        self.failures = {k: list(v) for k, v in (failures or {}).items()}
+        self.calls = []
+
+    @staticmethod
+    def cursor_for(i):
+        return "*" if i == 0 else f"C{i}"
+
+    def get(self, url, headers=None, timeout=None):
+        parsed = urllib.parse.urlsplit(url)
+        params = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+        path, cursor = parsed.path, params.get("nextCursorMark")
+        self.calls.append((path, cursor))
+        queued = self.failures.get((path, cursor))
+        if queued:
+            nxt = queued.pop(0)
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
+        if path == "/metrics":
+            return ok({"nbDocs": self.nb_docs})
+        if path == "/quotas":
+            return ok({"quota": 0})
+        index = 0 if cursor == "*" else int(cursor[1:])
+        if index >= len(self.pages):
+            return page([], cursor, nb=self.nb_docs)
+        return page(self.pages[index], self.cursor_for(index + 1), nb=self.nb_docs)

@@ -80,3 +80,13 @@ def apply_migration(conn: psycopg.Connection, name: str = "001_init.sql",
         conn.execute(migration_sql(name, schema))
     except psycopg.Error as exc:
         raise DatabaseError(f"Échec de la migration {name} : {mask(exc)}") from None
+
+
+def migration_names() -> list[str]:
+    """Migrations dans l'ordre (001_…, 002_…)."""
+    return sorted(p.name for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"))
+
+
+def apply_all_migrations(conn: psycopg.Connection, schema: str = "bulk_export") -> None:
+    for name in migration_names():
+        apply_migration(conn, name, schema)

@@ -25,7 +25,7 @@ def pg_conn():
     settings = load_settings({"database_url": url, "db_schema": TEST_SCHEMA})
     conn = db.connect(settings, attempts=1)
     conn.execute(f'DROP SCHEMA IF EXISTS "{TEST_SCHEMA}" CASCADE')
-    db.apply_migration(conn, schema=TEST_SCHEMA)
+    db.apply_all_migrations(conn, schema=TEST_SCHEMA)
     try:
         yield conn
     finally:

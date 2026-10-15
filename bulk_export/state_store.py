@@ -63,6 +63,13 @@ class ConflictRow:
 
 
 @dataclass(frozen=True)
+class RejectedRow:
+    reason: str                # ex. « Mention sans date. »
+    raw_json: str              # texte JSON reçu, non modifié
+    api_id: str | None
+
+
+@dataclass(frozen=True)
 class PageCommit:
     page_no: int
     cursor_sent: str
@@ -70,13 +77,13 @@ class PageCommit:
     records_count: int                         # mentions présentes dans la réponse API
     new_mentions: Sequence[MentionRow] = ()
     conflicts: Sequence[ConflictRow] = ()
-    error_count: int = 0
+    rejected: Sequence[RejectedRow] = ()
     pagination_finished: bool = False
 
     def counts(self) -> dict[str, int]:
         dup = sum(1 for c in self.conflicts if c.kind == "duplicate")
         col = sum(1 for c in self.conflicts if c.kind == "collision")
-        return {"new": len(self.new_mentions), "duplicate": dup, "collision": col, "error": self.error_count}
+        return {"new": len(self.new_mentions), "duplicate": dup, "collision": col, "error": len(self.rejected)}
 
 
 # ─── Exports ──────────────────────────────────────────────────────────────────
@@ -174,6 +181,15 @@ def set_validation(conn: psycopg.Connection, export_id: str, validation: dict[st
     )
 
 
+def set_expected_count(conn: psycopg.Connection, export_id: str, expected_count: int) -> None:
+    """Enregistre le volume annoncé par /metrics, une seule fois (il reste ensuite figé)."""
+    conn.execute(
+        """UPDATE exports SET expected_count = %s, last_updated_at = now()
+           WHERE export_id = %s AND expected_count IS NULL""",
+        (int(expected_count), validate_export_id(export_id)),
+    )
+
+
 def request_stop(conn: psycopg.Connection, export_id: str) -> None:
     """« Arrêter après la page en cours » : l'exécutant lit ce drapeau après chaque page."""
     conn.execute(
@@ -215,6 +231,7 @@ def commit_page(conn: psycopg.Connection, export_id: str, owner: str, page: Page
 
             _insert_mentions(cur, export_id, page, first_seq=state["unique_count"] + 1)
             _insert_conflicts(cur, export_id, page)
+            _insert_rejected(cur, export_id, page)
             _insert_page_row(cur, export_id, page)
 
             n = page.counts()
@@ -255,6 +272,16 @@ def _insert_conflicts(cur: psycopg.Cursor, export_id: str, page: PageCommit) -> 
            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
         [(export_id, c.kind, c.mention_id, c.other_mention_id, c.api_id, c.content_key, page.page_no)
          for c in page.conflicts],
+    )
+
+
+def _insert_rejected(cur: psycopg.Cursor, export_id: str, page: PageCommit) -> None:
+    if not page.rejected:
+        return
+    cur.executemany(
+        """INSERT INTO rejected_mentions (export_id, page_no, reason, raw_json, api_id)
+           VALUES (%s, %s, %s, %s, %s)""",
+        [(export_id, page.page_no, mask(r.reason), r.raw_json, r.api_id) for r in page.rejected],
     )
 
 

@@ -166,3 +166,66 @@ Ces deux cas ambigus sont réglables (`error` au lieu de fin), et figés avec ch
    page) seront mesurées au **premier export réel** (sprint 3). Les mesures sont prêtes dans `PageResult.raw_meta`.
 2. Le plafond de 5 minutes pour `Retry-After` est un choix par défaut, à ajuster si l'API impose des pauses plus longues.
 3. Points ouverts du sprint 1 toujours valables (origine du fichier Compass, mise à jour de `CLAUDE.md`).
+
+---
+
+## Sprint 3 — Moteur d'export : pages, tri des mentions, transaction par page (15/10/2026)
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/dedup.py` | Tri des mentions d'une page : nouvelle, doublon, jumelle ou rejetée. Fonctions pures, les mentions ne sont jamais modifiées. |
+| `bulk_export/engine.py` | `ExportEngine.run` : la boucle page par page, l'arrêt propre, les erreurs, la reprise après coupure de la base |
+| `bulk_export/migrations/002_rejected.sql` | Table `rejected_mentions` (**à exécuter dans Supabase**) |
+| `bulk_export/state_store.py` | Mentions rejetées enregistrées dans la même transaction que la page ; `set_expected_count` |
+| `bulk_export/db.py` | `apply_all_migrations` (applique 001, 002… dans l'ordre) |
+| `tests/` | +24 tests : tri sans base (8), moteur sur la base de test (16), faux serveur paginé |
+
+### Pourquoi « une page = une transaction » protège contre les pertes et les doublons
+Pour chaque page, le moteur écrit **en une seule fois** dans la base :
+- les mentions nouvelles ;
+- les doublons, les jumelles et les rejets ;
+- la ligne de la page ;
+- les compteurs ;
+- **le point de reprise**, c'est-à-dire le curseur de la page suivante.
+
+Postgres garantit qu'une transaction est enregistrée **en entier ou pas du tout**.
+- **Si l'application s'arrête avant la fin de l'écriture**, rien de la page n'est en base, et le point de reprise
+  pointe encore sur cette page. À la reprise, on la relit et on l'écrit : **aucune perte**.
+- **Si l'arrêt survient juste après**, la page est en base avec son point de reprise, qui pointe sur la page
+  suivante. À la reprise, on continue à partir de là : **aucun doublon**.
+- Il n'existe **aucun moment** où le point de reprise est avancé sans les mentions, ni l'inverse. C'est la règle n°4.
+- En dernier rempart, la clé de la table des mentions (`export_id` + empreinte) refuse physiquement une même mention
+  deux fois. Toute la page serait alors annulée plutôt que d'enregistrer un doublon.
+
+Cas délicat traité : la base reçoit l'ordre d'enregistrer, l'enregistre, mais la connexion coupe avant que le moteur ait
+la confirmation. Le moteur se reconnecte et **regarde ce que la base contient**. Si la page y est, il passe à la
+suivante ; sinon, il la réécrit. Les deux cas sont testés.
+
+### Ce que le moteur écrit dans le journal de l'export (onglet Monitor)
+- une ligne par page : mentions reçues, nouvelles, doublons, jumelles, rejetées, temps de réponse, taille ;
+- à la première page de chaque lancement : **la liste des noms de champs reçus**, sans aucune valeur. C'est elle qui
+  tranchera la question du champ verbatim (`verbatim content` ou `content trad`) ;
+- les `id` API portés par plusieurs mentions différentes, pour vérifier sur données réelles que `id` n'est pas fiable ;
+- les avertissements de la règle de fin (situations ambiguës acceptées), les coupures, les arrêts et les reprises.
+
+### Décisions
+- **Mentions sans date** : ni jetées, ni enregistrées comme valides. Elles sont gardées telles quelles dans
+  `rejected_mentions`, comptées dans `error_count`, et empêcheront COMPLETED à la validation (sprint 6).
+- **Tests sur une vraie base Postgres** plutôt qu'une fausse base en mémoire, pour ne pas reproduire la logique de la
+  base en double. Le tri reste testé seul, sans base.
+- Le moteur **prend lui-même le bail** au démarrage et le **libère** à la fin ; il le renouvelle après chaque page
+  et s'arrête net s'il l'a perdu.
+- Fin de pagination → INCOMPLETE ; erreur → FAILED avec le numéro de page et un message masqué. Les deux sont
+  reprenables depuis le dernier point de reprise.
+- Le volume `/metrics` est demandé **une seule fois**, au premier lancement, puis figé.
+- Vérification de la solidité des tests : deux mécanismes de protection ont été volontairement cassés (reprise après
+  coupure, détection des doublons). Les tests l'ont bien détecté, puis le code a été remis en état.
+
+### Tests
+- `pytest` : **199 réussis** avec la base Postgres de test ; sans base, les tests base de données sont sautés.
+
+### Points ouverts
+1. **À faire par vous : exécuter `002_rejected.sql` dans Supabase** (LISEZMOI §1.3).
+2. Le premier export réel arrivera avec le lancement en ligne de commande (sprint 4) ou l'interface (sprint 5).
+3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).
