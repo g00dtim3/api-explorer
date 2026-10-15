@@ -1,79 +1,90 @@
-# Décision — Identifiant d'unicité des mentions (PROPOSITION, à valider)
+# Décision — Identifiant d'unicité des mentions
 
-> Statut : **proposée le 15/10/2026, en attente de validation de l'utilisateur.**
-> Elle modifie la règle n°6 de `CLAUDE.md` et la spec §5.3 : rien ne sera codé avant validation.
+> Statut : **validée par l'utilisateur le 15/10/2026.**
+> Remplace la règle n°6 initiale de `CLAUDE.md` et précise la spec §5.3.
 
 ## 1. Le problème
-L'utilisateur indique (15/10/2026) que **l'API ne fournit pas d'identifiant fiable pour un verbatim**.
-La documentation montre bien un champ `id` (ex. `"97749480"`), mais ni son unicité ni sa stabilité ne sont garanties.
-Le projet Compass (`g00dtim3/mvp_verbatim_import`) avait déjà buté sur ce point : il n'a pas pu confirmer que le
-`guid` Semantiweb (c'est-à-dire le `id` de l'API, renommé `guid` par `postprocess_reviews()`) reste stable d'un
-export à l'autre. Il l'a donc remplacé par une empreinte calculée.
+Le champ `id` de l'API est **présent mais pas fiable** (indiqué par l'utilisateur, 15/10/2026) :
+- les `id` sont **générés au moment de l'export par l'API** ;
+- **d'un export à l'autre, on retrouve les mêmes valeurs d'`id`**. Un même `id` ne désigne donc pas forcément la même mention.
 
-La règle n°6 actuelle (« pas d'ID natif exploitable = erreur explicite ») ferait donc échouer **tous** les exports.
+Conséquences :
+- `id` ne peut servir **ni** de clé d'unicité, **ni** de lien entre deux exports ;
+- on ne sait pas si un `id` est unique **à l'intérieur** d'un même parcours, ni s'il change quand une page est relue
+  (nouvelle tentative, reprise). Le moteur ne doit donc **rien** supposer sur ce champ ;
+- dans le module 3 actuel, la déduplication par `id` pourrait jeter de vraies mentions si des `id` se répètent dans un
+  même export (à vérifier sur un export réel).
 
-## 2. Ce que fait Compass (`compass_import/core/hasher.py`, « scénario B »)
+Le projet Compass (`g00dtim3/mvp_verbatim_import`, où l'`id` de l'API s'appelle `guid` après `postprocess_reviews()`)
+était arrivé à la même conclusion et utilise une empreinte calculée.
+
+## 2. La méthode Compass (`compass_import/core/hasher.py`, « scénario B »)
 ```
-id = SHA-256( brand + date + product_name + verbatim_content + country + source + rating )
+SHA-256( brand + date + product_name + verbatim_content + country + source + rating )
 ```
-- 7 champs, **dans cet ordre figé**, chacun passé en `strip()` puis `lower()`, et collés **sans séparateur** ;
-- un champ absent compte comme `""` (une date absente est une erreur) ;
-- le `guid` d'origine est gardé à côté, pour l'audit ;
-- en base : `ON CONFLICT (id) DO NOTHING`, c'est-à-dire qu'une ligne de même empreinte est ignorée.
-- **Limite assumée par Compass** : deux avis réellement différents mais identiques sur ces 7 champs (ex. deux « Parfait »
-  5 étoiles, même jour, même produit, même pays, même source) ne donnent qu'**une seule** ligne.
+- 7 champs, **dans cet ordre figé**, chacun passé en `str()`, `strip()`, puis `lower()`, et collés **sans séparateur** ;
+- un champ absent compte comme `""` ; une date absente est une erreur ;
+- encodage UTF-8, résultat en hexadécimal minuscule (64 caractères).
 
-Ce n'est pas un identifiant « inventé » au sens de la règle n°6 : ni compteur, ni UUID, ni numéro de ligne. C'est
-une **empreinte des données source**, recalculable par n'importe qui à partir de la mention.
+Ce n'est pas un identifiant « inventé » (ni compteur, ni UUID, ni numéro de ligne) : c'est une **empreinte des
+données source**, que l'on peut recalculer à partir de la mention.
 
-## 3. Pourquoi on ne peut pas copier Compass tel quel
-Compass **importe** des fichiers : fusionner deux lignes identiques y est acceptable. Bulk Export V2 **exporte** et
-doit prouver sa complétude (spec §7). Si deux avis jumeaux sont fusionnés :
-- une mention réelle disparaît, ce qui viole la règle n°7 (« jamais fusionné silencieusement ») ;
-- le nombre de mentions uniques passe sous `nbDocs` : l'export finit en INCOMPLETE **sans que rien ne manque vraiment**.
+## 3. Ce qui est retenu pour V2 : trois empreintes
 
-## 4. Proposition pour V2 : deux empreintes
-| Empreinte | Calcul | Rôle |
-|---|---|---|
-| `content_key` | **Exactement la méthode Compass scénario B** (mêmes 7 champs, même ordre, même normalisation) | Clé métier commune avec Compass ; regroupe les avis « semblables » |
-| `raw_hash` | SHA-256 de la mention **complète** telle que reçue (JSON aux clés triées, sans aucune modification de valeur) | Distingue une vraie répétition d'un avis jumeau |
+| Empreinte | Calcul | Rôle | Où elle apparaît |
+|---|---|---|---|
+| `content_key` | Méthode Compass, mais avec la **date au jour** (`AAAA-MM-JJ`, tirée de `2024-11-28T15:45:28Z`) | Regroupe les avis « semblables » ; sert à détecter les jumeaux | Métadonnées, manifeste, format analytique |
+| `raw_hash` | SHA-256 de la mention **complète sauf le champ `id`** (JSON aux clés triées, valeurs non modifiées) | **Clé d'unicité** de l'export : distingue une vraie répétition d'un avis jumeau | Métadonnées (base, manifeste) |
+| `compass_id` | **Reproduction exacte** de l'`id` Compass (date ramenée **au 1er du mois**, comme le fait le format plat) | Lien futur entre Bulk Export V2 et Compass | **Format analytique uniquement** |
 
-Correspondance des champs API → méthode Compass :
-`brand` → brand · `date` → date · `product` → product_name · `verbatim content` → verbatim_content ·
-`country` → country · `source` → source · `rating` → rating.
-(Le nom exact du champ verbatim reste à vérifier sur une vraie réponse, cf. `audit_api.md` écart C.)
+Choix validés :
+- **Option A** pour `content_key` (date au jour) **+** `compass_id`, car les deux projets seront reliés à terme.
+- `raw_hash` **exclut `id`** : comme l'API génère les `id` à l'export, une même mention relue pourrait revenir avec un
+  autre `id`. L'inclure ferait passer une page répétée pour des mentions nouvelles, donc des doublons écrits.
+  Ce choix est **réglable** (règle n°10) et pourra être revu si le fournisseur garantit `id` dans un parcours.
 
 ### Règles de traitement
 | Cas | Ce qui se passe | Compteur |
 |---|---|---|
 | `raw_hash` jamais vu | Mention écrite | `unique_count` |
-| Même `raw_hash` déjà vu (mention strictement identique, tous champs compris) | **Non réécrite**. C'est le cas d'une page renvoyée deux fois par l'API. | `duplicate_count` |
-| Même `content_key`, mais `raw_hash` différent | **Les deux sont écrites**, et une ligne de conflit est tracée (les deux empreintes, la page, sans le texte du verbatim dans le journal) | `collision_count`, signalé dans le manifeste et à la validation |
-| Date absente ou vide | Erreur explicite (même règle que Compass) | `error_count` |
+| `raw_hash` déjà vu (mêmes valeurs sur tous les champs sauf `id`) | **Non réécrite** : c'est le cas d'une mention renvoyée deux fois. Les deux `id` sont notés dans le journal. | `duplicate_count` |
+| Même `content_key`, `raw_hash` différent (ex. attributs ou opinion différents) | **Les deux sont écrites**, et le conflit est tracé : empreintes et page, **sans le texte** du verbatim dans le journal | `collision_count`, signalé dans le manifeste et à la validation |
+| Date absente ou illisible | Erreur explicite | `error_count` |
 
-**Limite qui demeure, à documenter et non à contourner :** deux mentions **identiques sur tous les champs** renvoyés
-par l'API ne peuvent pas être distinguées d'une répétition de page. Elles comptent pour une. C'est la même limite
-structurelle que Compass, mais réduite à un cas beaucoup plus rare, puisque tous les champs, `id` compris, doivent être égaux.
+**Limite assumée, documentée et non contournée :** deux avis réellement distincts, identiques sur **tous** les champs
+sauf `id`, comptent pour un seul. Ils sont signalés comme doublons, avec leurs deux `id`, et ne disparaissent pas en silence.
+Si cela arrive, le nombre de mentions uniques sera inférieur à `nbDocs` et l'export sera INCOMPLETE avec ce motif
+explicite. On ne déclare jamais une complétude non démontrée.
 
 ### Ce qui ne change pas
-- Les données brutes (JSONL) restent **intactes** : le champ `id` de l'API est gardé tel quel (règle n°3). Il n'est
-  simplement **pas utilisé comme clé**.
-- Les empreintes sont des **métadonnées** stockées à côté de la mention, pas des champs ajoutés dans le JSON brut.
+- Les données brutes (JSONL) restent **intactes**, `id` compris (règle n°3).
+- Les empreintes sont des **métadonnées** stockées à côté de la mention, jamais ajoutées dans le JSON brut.
 
-## 5. Point à trancher : la date dans `content_key`
-Compass calcule son empreinte à partir du **format plat**, où `postprocess_reviews()` a ramené la date au **1er du mois**.
-Compass lit ensuite `01/MM/AAAA`, donc ses empreintes sont calculées avec une date au mois près.
+## 4. Reproduire exactement l'`id` Compass : points de vigilance
+`compass_id` doit être **identique, au caractère près**, à ce que Compass calculerait sur le format plat de la même mention.
+Correspondance (Compass lit le CSV plat produit par `postprocess_reviews()`) :
 
-| Option | Avantage | Inconvénient |
+| Paramètre Compass | Champ Compass lu | Valeur prise dans la mention API |
 |---|---|---|
-| **A. Date au jour** (`AAAA-MM-JJ` tiré de `2024-11-28T15:45:28Z`) | Plus précise : moins d'avis jumeaux confondus | `content_key` **différent** de l'`id` Compass pour la même mention |
-| **B. Date au 1er du mois** (comme Compass aujourd'hui) | `content_key` **identique** à l'`id` Compass : jointure directe entre les deux projets | Plus de collisions (avis semblables du même mois) |
+| brand | `brand` | `brand` |
+| date | `date` (format plat `01/MM/AAAA`) | `date` ramenée au 1er du mois, en `AAAA-MM-01` |
+| product_name | `product_name_SEMANTIWEB` | `product` |
+| verbatim_content | `verbatim_content` | `content trad` (renommé par le format plat) — **voir ci-dessous** |
+| country | `country` | `country` |
+| source | `source` (vide → `""`) | `source` |
+| rating | `rating` converti en entier 1–5, sinon `""` | `rating` |
 
-Recommandation : **A** pour `content_key`, avec en option une colonne `compass_id` (option B) dans le seul format
-analytique si la jointure avec Compass est utile. À valider.
+⚠️ **À vérifier sur une vraie réponse (sprint 1)** : la documentation API nomme le verbatim `verbatim content`, alors que
+le format plat renomme `content trad`. Si l'API renvoie `verbatim content`, le format plat actuel ne crée **pas**
+de colonne `verbatim_content`, et Compass hache alors un verbatim vide. `compass_id` reproduira **le comportement
+réel de Compass**, même vide, et la situation sera signalée.
 
-## 6. Modification proposée de `CLAUDE.md`, règle n°6
-> **6. Pas d'identifiant inventé** (compteur, UUID, numéro de ligne). L'unicité repose sur deux empreintes
-> SHA-256 calculées **uniquement à partir des champs source** (`content_key` selon la méthode Compass scénario B,
-> `raw_hash` sur la mention complète ; cf. `docs/bulk_v2/decision_identifiant.md`). Le champ `id` de l'API est
-> conservé tel quel mais n'est pas utilisé comme clé. Une mention sans date = erreur explicite.
+Garanties prévues dans les sprints suivants :
+- un test qui compare `compass_id` avec la fonction `verbatim_hash` de Compass (copie figée de la référence, avec des données `fake_*`) ;
+- la correspondance des champs est **réglable**, et le champ verbatim utilisé est inscrit dans le manifeste.
+
+## 5. Règle n°6 de `CLAUDE.md` (nouvelle rédaction)
+> **6. Pas d'identifiant inventé** (compteur, UUID, numéro de ligne). Le champ `id` de l'API n'est pas fiable (régénéré
+> à chaque export) : il est conservé tel quel mais n'est **jamais** utilisé comme clé. L'unicité repose sur des empreintes
+> SHA-256 calculées uniquement à partir des champs source (`raw_hash`, `content_key`, `compass_id` ; cf.
+> `docs/bulk_v2/decision_identifiant.md`). Une mention sans date = erreur explicite.

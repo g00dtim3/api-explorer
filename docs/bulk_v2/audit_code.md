@@ -91,7 +91,9 @@ Toutes ces fins débouchent sur le même message « ✅ terminé ». Si le nombr
 - Une mention sans `id` est **gardée** sans signalement.
 - Les doublons **à l'intérieur d'une même page** ne sont pas détectés.
 - Un doublon au contenu différent est jeté en silence : il n'y a aucune comparaison.
-- Le champ identifiant utilisé par le code est **`id`**.
+- Le champ identifiant utilisé par le code est **`id`**. Or `id` est généré par l'API à chaque export et n'est pas fiable
+  (voir `decision_identifiant.md`). Si des `id` se répètent dans un même export, cette déduplication **jette de vraies
+  mentions** : c'est une explication possible des « reviews manquantes » du module 3, **à vérifier** sur un export réel.
 
 ### Autres points
 - `random` est proposé à l'utilisateur pour le mode complet : à interdire en V2 (règle n°11).

@@ -53,8 +53,8 @@ Dans l'exemple de la documentation :
 | # | Point | Valeur | Statut |
 |---|---|---|---|
 | 1 | Taille de page maximale `rows` | **1 000** (c'est aussi la valeur par défaut) | documenté |
-| 2 | Champ identifiant natif | Un champ **`id`** (chaîne) figure dans la documentation, mais **l'API ne fournit pas d'identifiant fiable pour un verbatim** | documenté (champ) · non fiable : **indiqué par l'utilisateur** (15/10/2026) |
-| 3 | Clé d'unicité retenue | Empreinte SHA-256 des champs source, méthode du projet Compass | **proposition** : `decision_identifiant.md` |
+| 2 | Champ identifiant natif | `id` (chaîne) est **présent mais pas fiable** : il est généré au moment de l'export, et les mêmes valeurs se retrouvent d'un export à l'autre | documenté (champ) · **indiqué par l'utilisateur** (15/10/2026) |
+| 3 | Clé d'unicité retenue | Empreintes SHA-256 des champs source (`raw_hash` sans `id`, `content_key`, `compass_id`) | **validé** : `decision_identifiant.md` |
 | 4 | Paramètre et format du curseur | Le curseur se passe dans `nextCursorMark` (curseur de départ `*`, selon le code) et revient dans `result.nextCursorMark`. Il fonctionne aussi en mode `random`. | documenté (paramètre et réponse) · constaté dans le code (`*`) |
 | 5 | **Signal de fin de pagination** | Non décrit : curseur identique, page vide ou champ absent ? | **inconnu** |
 | 6 | Ordre des résultats stable entre deux parcours ? | Non décrit (sans `random`) | **inconnu** |

@@ -1,6 +1,6 @@
 # Journal du projet Bulk Export V2
 
-## Sprint 0 — Audit (en cours, 14/10/2026)
+## Sprint 0 — Audit (14–15/10/2026, terminé sous réserve de validation)
 
 ### Fait
 - Branche `feature/bulk-export-v2` créée.
@@ -29,10 +29,12 @@
    version ou laisser en l'état (hors périmètre « ne pas modifier le module 3 »).
 5. 🟠 `postprocess_reviews()` : réservé au format analytique ; lecture des attributs fragile, perte du jour de la date.
 6. ✅ **Quota** : réglé. Le compte n'a plus de limite (indiqué par l'utilisateur le 15/10/2026). Simple avertissement, pas de blocage.
-9. 🔴 **Identifiant** : l'API ne fournit pas d'identifiant fiable (indiqué par l'utilisateur). Proposition, reprise du
-   projet Compass (`g00dtim3/mvp_verbatim_import`, `core/hasher.py`) : deux empreintes SHA-256 (`content_key` et
-   `raw_hash`), voir `decision_identifiant.md`. **En attente de validation**, avec la modification de la règle n°6 de
-   `CLAUDE.md` et le choix de la date (jour ou mois).
+9. ✅ **Identifiant** (validé le 15/10/2026) : `id` est généré par l'API à chaque export, donc non fiable. Unicité par
+   empreintes SHA-256 reprises du projet Compass : `raw_hash` (mention complète sans `id`, clé d'unicité),
+   `content_key` (méthode Compass, date au jour), `compass_id` (reproduction exacte de l'id Compass, date au mois,
+   format analytique uniquement, pour relier les deux projets). Règle n°6 de `CLAUDE.md` réécrite.
+10. 🟠 Reproduire `compass_id` exactement : le nom du champ verbatim est à vérifier sur une vraie réponse
+    (`content trad` contre `verbatim content`), voir `decision_identifiant.md` §4.
 7. Inconnus à faire confirmer : signal de fin, ordre stable, validité du curseur, limites de débit / `Retry-After`,
    format des erreurs, stabilité des données, unicité de `id`, format des dates (`YYYY-DD-MM` dans le texte,
    `YYYY-MM-DD` dans les exemples), liste à jour des champs.
@@ -41,12 +43,11 @@
 
 ### Définition de terminé du sprint 0
 - [x] `audit_code.md` et `audit_api.md` existent et sont lisibles par un non-développeur.
-- [~] Champ ID natif : `id` documenté mais **non fiable**. Clé d'unicité par empreinte proposée (`decision_identifiant.md`), à valider.
+- [x] Champ ID : `id` présent mais non fiable ; clé d'unicité par empreintes validée (`decision_identifiant.md`).
 - [~] Règle de fin de pagination : **non documentée**. Règle provisoire configurable proposée.
 - [x] Liste complète des transformations de `postprocess_reviews()`.
-- [ ] Estimation chiffrée de l'espace et de la durée : **impossible sans mesure réelle**. Formules prêtes, mesure au sprint 1.
+- [ ] Estimation chiffrée de l'espace et de la durée : **impossible sans mesure réelle**. Formules prêtes, **reportée au sprint 1** (mesure automatique sur la première page réelle).
 - [x] Aucun token ni mention réelle commité.
 
 ### Action humaine
 - Envoyer `questions_fournisseur.md` au fournisseur.
-- Valider `decision_identifiant.md` (option de date A ou B, nouvelle règle n°6).
