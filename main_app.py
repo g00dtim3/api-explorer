@@ -15,6 +15,14 @@ except ImportError as e:
     st.error(f"❌ Erreur d'import des modules : {e}")
     modules_available = False
 
+# Bulk Export V2 : chargé à part, pour qu'un problème de ce module n'empêche pas les autres de fonctionner.
+try:
+    import module4_bulk_export_v2
+    bulk_v2_available = True
+except Exception as e:
+    bulk_v2_error = e
+    bulk_v2_available = False
+
 
 def display_navigation():
     """Affiche la navigation principale entre les modules"""
@@ -27,6 +35,7 @@ def display_navigation():
             "🔍 Module 1 - Explorateur API",
             "🎯 Module 2 - Export Manuel", 
             "🚀 Module 3 - Export Bulk",
+            "🧱 Bulk Export V2",
             "📋 Journal des exports"
         ],
         help="Sélectionnez le module à utiliser"
@@ -192,6 +201,13 @@ def main():
         st.markdown("---")
         module3_bulk_export.main()
         
+    elif "Bulk Export V2" in module_choice:
+        st.markdown("---")
+        if bulk_v2_available:
+            module4_bulk_export_v2.main()
+        else:
+            st.error(f"❌ Bulk Export V2 indisponible : {type(bulk_v2_error).__name__}")
+
     elif "Journal des exports" in module_choice:
         st.markdown("---")
         display_export_journal()

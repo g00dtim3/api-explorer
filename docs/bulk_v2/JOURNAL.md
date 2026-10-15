@@ -279,3 +279,62 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
    l'application.
 2. Rappel : `002_rejected.sql` doit être exécuté dans Supabase avant tout export réel.
 3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).
+
+---
+
+## Sprint 5 — Interface Streamlit : New Export et Export Monitor (15/10/2026)
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `module4_bulk_export_v2.py` | Page « Bulk Export V2 » : onglets New Export, Export Monitor, Downloads (squelette), Export History (liste) |
+| `bulk_export/ui_logic.py` | Règles sans affichage : filtres via `build_filter_params`, import JSON (format V2 et ancien format), estimation, blocages, progression |
+| `main_app.py` | Entrée de menu « 🧱 Bulk Export V2 », chargée à part (un problème du module 4 n'empêche pas les autres de fonctionner). Rien d'autre ne change. |
+| `tests/test_ui_logic.py`, `tests/test_app_smoke.py` | +19 tests, dont 4 tests de la page avec l'outil de test de Streamlit |
+
+### Ce que fait la page
+- **New Export** : filtres du formulaire (mêmes listes et même `build_filter_params` que le module 1) ou import JSON
+  (format V2 ou ancien format ; secrets refusés ; sélection de produits ignorée avec un avertissement). Mode Aperçu
+  (100 mentions, rien d'enregistré, avec la liste des champs reçus), formats, taille des lots, export de la
+  configuration. « Estimer » donne le volume, les pages et les lots. **Durée et espace seulement s'il existe des
+  mesures réelles** (exports précédents), sinon rien. « Voir les quotas ».
+- **Lancement bloqué** si : Supabase injoignable, token absent, configuration invalide, pas d'estimation **pour ces
+  filtres-là**, volume nul, ou un export déjà en cours. Avertissement au-delà de 500 000 mentions. L'encadré de la
+  limite V1 est toujours visible.
+- **Export Monitor** : indicateurs de la spec §4.3 relus dans Supabase, barre de progression plafonnée (écart affiché),
+  rafraîchissement automatique toutes les 5 s pendant une collecte (seul ce bloc est rafraîchi), 20 derniers
+  événements (erreurs en rouge, avertissements en orange), boutons « Arrêter après la page en cours » et
+  « Reprendre ». Un export orphelin est détecté et repassé en PAUSED.
+- À chaque ouverture de la page, les exports interrompus sont détectés (et relancés si `auto_resume = true`).
+
+### Décisions
+- Les listes de référence (marques, pays…) passent par le **client strict** du sprint 2, et non par `api_client` :
+  en cas d'erreur, l'ancien client affiche l'adresse complète, token compris.
+- Navigation entre onglets par un sélecteur horizontal plutôt que `st.tabs`, pour pouvoir **basculer
+  automatiquement vers le Monitor** après « Lancer ».
+- Le volume affiché par l'estimation est **celui enregistré** dans l'export (pas de second appel à `/metrics`).
+- **Bug trouvé par les tests et corrigé** : le bouton « Estimer » et l'estimation enregistrée partageaient la même clé,
+  ce qui faisait planter la page après un clic.
+
+### Tests
+- `pytest` : **230 réussis** avec la base de test (181 réussis et 49 sautés sans base).
+- Les tests de la page vérifient :
+  - le message clair sans Supabase ;
+  - l'affichage du Monitor ;
+  - le blocage du lancement sans estimation ;
+  - le parcours complet « estimer → lancer → bascule vers le Monitor → export jusqu'à INCOMPLETE » ;
+  - le chargement des 5 entrées du menu principal.
+
+### Vérifications manuelles sur Streamlit Cloud (à faire par vous — résultats à reporter ici)
+| # | Vérification | Résultat attendu | Résultat constaté |
+|---|---|---|---|
+| 1 | Déployer la branche, secrets en place, scripts 001 et 002 exécutés | La page « Bulk Export V2 » s'ouvre sans erreur | _à compléter_ |
+| 2 | Petit export réel (quelques milliers de mentions) | Il va jusqu'à INCOMPLETE ; le journal montre « Champs reçus : … » | _à compléter_ |
+| 3 | Recharger la page pendant l'export | L'export continue, l'affichage revient | _à compléter_ |
+| 4 | Arrêter, puis reprendre | PAUSED après la page en cours, puis reprise jusqu'au bout | _à compléter_ |
+| 5 | « Reboot app » pendant un export | Export affiché comme interrompu (≤ 2 min) → Reprendre → fin sans perte ni doublon (doublons = 0) | _à compléter_ |
+
+### Points ouverts
+1. Les 5 vérifications ci-dessus, et la ligne « Champs reçus » du premier export réel.
+2. Downloads (fichiers CSV / JSONL / ZIP, manifeste) et validation (COMPLETED) : sprint 6.
+3. Points ouverts précédents inchangés (origine du fichier Compass, mise à jour de `CLAUDE.md`).

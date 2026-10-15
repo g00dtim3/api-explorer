@@ -63,6 +63,13 @@ Pour la ligne de commande (plus tard), les mêmes valeurs peuvent être données
 `BULK_EXPORT_API_TOKEN`, `BULK_EXPORT_DATABASE_URL`, `BULK_EXPORT_DB_SCHEMA`, `BULK_EXPORT_SUPABASE_URL`, `BULK_EXPORT_SUPABASE_SERVICE_KEY`,
 `BULK_EXPORT_STORAGE_BUCKET` et `BULK_EXPORT_RETENTION_DAYS`.
 
+## 1 bis. Déployer la page sur Streamlit Cloud (sprint 5)
+1. Dans Streamlit Cloud, ouvrez votre application → **Settings** → **General** (ou créez une application de test),
+   puis choisissez la branche **`feature/bulk-export-v2`**. Le fichier principal reste `main_app.py`.
+2. Vérifiez que les secrets contiennent `[api] token` (déjà utilisé par l'application) **et** `[bulk_export] database_url`.
+3. Vérifiez que `001_init.sql` **et** `002_rejected.sql` ont été exécutés dans Supabase.
+4. Ouvrez l'application → menu de gauche → **🧱 Bulk Export V2**.
+
 ## 2. Lancer les tests (pour un développeur)
 ```bash
 pip install -r requirements-dev.txt
