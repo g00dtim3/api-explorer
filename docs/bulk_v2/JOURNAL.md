@@ -442,3 +442,6 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
   (LISEZMOI §1.6 mis à jour). Le message d'erreur l'indique maintenant directement.
 - Aucune donnée perdue : les mentions sont restées en base. Après le changement de clé, il suffit de cliquer sur
   **Valider**.
+- ✅ **Après le passage à la clé `service_role` : validation réussie, export COMPLETED** (confirmé par l'utilisateur
+  le 15/10/2026). Premier export de bout en bout sur l'infrastructure réelle : collecte → fichiers dans Storage →
+  relecture et contrôles → COMPLETED (règle A, 1 doublon tracé, 2 jumelles signalées).
