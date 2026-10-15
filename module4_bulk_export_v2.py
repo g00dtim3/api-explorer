@@ -15,13 +15,14 @@ import json
 import pandas as pd
 import streamlit as st
 
-from bulk_export import db, state_store as ss, ui_logic
+from bulk_export import db, downloads, finalize, state_store as ss, ui_logic
 from bulk_export.api_adapter import RatingsReviewsAdapter
 from bulk_export.api_http import ApiError, RatingsReviewsHttpClient
 from bulk_export.logging_utils import mask
 from bulk_export.models import ALLOWED_BATCH_SIZES, DEFAULT_BATCH_SIZE, ConfigError, ExportConfig
 from bulk_export.runner import build_runner
 from bulk_export.settings import SettingsError, load_api_credentials, load_settings
+from bulk_export.storage import StorageError, build_storage
 
 LIMIT_TEXT = (
     "**Limite de la version 1** — L'export avance tant que l'application Streamlit est en marche. Fermer l'onglet "
@@ -44,6 +45,14 @@ def get_runner():
 
 def _connect():
     return db.connect(load_settings(), attempts=1)
+
+
+def _storage():
+    """Stockage des fichiers finaux, ou None s'il n'est pas configuré."""
+    settings = load_settings()
+    if not (settings.supabase_url and settings.supabase_service_key):
+        return None
+    return build_storage(settings)
 
 
 def _http() -> RatingsReviewsHttpClient:
@@ -235,7 +244,7 @@ def _monitor_tab(conn, runner) -> None:
     st.session_state["bv2_selected"] = export_id
 
     status = next(e["status"] for e in exports if e["export_id"] == export_id)
-    live = status in ("RUNNING", "STOPPING", "PENDING")
+    live = status in ("RUNNING", "STOPPING", "PENDING", "VALIDATING")
     if live and hasattr(st, "fragment"):
         st.fragment(run_every=REFRESH_S)(_monitor_block)(export_id, runner)
     else:
@@ -256,14 +265,16 @@ def _monitor_block(export_id: str, runner) -> None:
         if ui_logic.is_orphan(row, now):
             ss.recover_orphans(conn)
             row = ss.get_export(conn, export_id)
-        _indicators(row, now)
+        files = ss.list_files(conn, export_id)
+        _indicators(row, now, files)
         _controls(row, runner)
+        _validation_results(row)
         _events(conn, export_id)
     finally:
         conn.close()
 
 
-def _indicators(row, now) -> None:
+def _indicators(row, now, files) -> None:
     status = row["status"]
     st.markdown(f"### {row['name']}  \n`{row['export_id']}` — statut **{status}**")
     fraction, gap = ui_logic.progress(row["unique_count"], row["expected_count"])
@@ -280,7 +291,7 @@ def _indicators(row, now) -> None:
     cols[0].metric("Doublons", row["duplicate_count"])
     cols[1].metric("Jumelles", row["collision_count"])
     cols[2].metric("Rejetées", row["error_count"])
-    cols[3].metric("Lots validés", row["batch_index"])
+    cols[3].metric("Lots (fichiers)", sum(1 for f in files if f["kind"] == "batch_jsonl"))
     cols[4].metric("Quota API", "illimité")
     st.caption(f"Point de reprise : `{row['last_committed_cursor'] or 'début'}` — "
                f"pagination terminée : {'oui' if row['pagination_finished'] else 'non'}")
@@ -291,8 +302,12 @@ def _indicators(row, now) -> None:
                    "tant qu'elles existent.")
     if status == "FAILED" and row["error_details"]:
         st.error(f"Échec : {row['error_details'].get('message', '')}")
-    if status == "INCOMPLETE" and row["pagination_finished"]:
-        st.info("Collecte terminée. Prochaine étape : la validation (sprint 6). L'export n'est pas encore déclaré complet.")
+    if status == "INCOMPLETE" and row["pagination_finished"] and not row["validation_json"]:
+        st.info("Collecte terminée, validation à lancer : l'export n'est pas encore déclaré complet.")
+    if status == "VALIDATING":
+        st.info("Validation en cours : fabrication des fichiers, envoi dans Storage, relecture et contrôles…")
+    if status == "COMPLETED":
+        st.success("Export COMPLETED : complet et validé. Fichiers dans l'onglet Downloads.")
 
 
 def _controls(row, runner) -> None:
@@ -305,7 +320,15 @@ def _controls(row, runner) -> None:
             st.info("Arrêt demandé : l'export se met en pause après la page en cours.")
     if status == "STOPPING" or (status == "RUNNING" and row["stop_requested"]):
         st.info("Arrêt en cours…")
-    resumable = status in ("PAUSED", "FAILED") or (status == "INCOMPLETE" and not row["pagination_finished"])
+    finished = bool(row["pagination_finished"])
+    if finished and status in ("INCOMPLETE", "FAILED"):
+        if c2.button("Valider", type="primary", disabled=runner is None, key=f"bv2_validate_{export_id}"):
+            result = runner.validate(export_id)
+            if result.ok:
+                st.rerun()
+            st.error(result.message)
+        return
+    resumable = status in ("PAUSED", "FAILED") or (status == "INCOMPLETE" and not finished)
     if resumable:
         if status == "PAUSED" and row["error_details"] is None:
             st.info("Export en pause : il reprendra au dernier point de reprise, sans perte ni doublon.")
@@ -314,6 +337,17 @@ def _controls(row, runner) -> None:
             if result.ok:
                 st.rerun()
             st.error(result.message)
+
+
+def _validation_results(row) -> None:
+    result = row["validation_json"]
+    if not result:
+        return
+    st.markdown(f"#### Validation ({result.get('validated_at', '')}) : **{result.get('final_status')}**")
+    icons = {True: "✅", False: "❌", None: "ℹ️"}
+    st.dataframe(pd.DataFrame([{"": icons[c["ok"]], "Contrôle": c["name"], "Détail": c["detail"],
+                                "Si échec": c["on_fail"] or "—"} for c in result.get("checks", [])]),
+                 use_container_width=True, hide_index=True)
 
 
 def _events(conn, export_id: str) -> None:
@@ -325,13 +359,117 @@ def _events(conn, export_id: str) -> None:
 
 # ─── Onglets Downloads et History ─────────────────────────────────────────────
 
-def _history_tab(conn) -> None:
+_FILE_LABELS = {"csv_complete": "CSV complet", "zip": "Archive ZIP (lots + manifeste)", "manifest": "Manifeste (JSON)",
+                "csv_partial": "CSV — DONNÉES PARTIELLES"}
+
+
+def _link(storage, f, expires_s: int = 3600) -> None:
+    name = f["path"].rsplit("/", 1)[-1]
+    try:
+        url = storage.signed_url(f["path"], expires_s, download_name=name)
+    except StorageError as exc:
+        st.error(mask(str(exc)))
+        return
+    size = ui_logic.format_bytes(f["size_bytes"])
+    st.link_button(f"⬇️ {_FILE_LABELS.get(f['kind'], name)} — {size}", url)
+
+
+def _downloads_tab(conn) -> None:
+    storage = _storage()
+    if storage is None:
+        st.warning("Stockage non configuré : renseignez supabase_url et supabase_service_key (LISEZMOI §1.5).")
+        return
+    done = [e for e in ss.list_exports(conn, limit=200) if e["status"] == "COMPLETED" and not e["files_expired_at"]]
+    if not done:
+        st.info("Aucun export validé (COMPLETED) avec des fichiers disponibles.")
+        return
+    labels = {e["export_id"]: f"{e['name']} — {e['unique_count']} mentions ({e['export_id']})" for e in done}
+    export_id = st.selectbox("Export validé", list(labels), format_func=labels.get, key="bv2_dl_sel")
+    files = ss.list_files(conn, export_id)
+    st.caption("Liens signés valables 1 heure. Le téléchargement se fait directement depuis Supabase Storage "
+               "(aucun appel à l'API Ratings & Reviews, aucun chargement dans l'application).")
+    for kind in ("csv_complete", "zip", "manifest"):
+        for f in files:
+            if f["kind"] == kind:
+                _link(storage, f)
+    batches = [f for f in files if f["kind"] == "batch_jsonl"]
+    with st.expander(f"Lots JSONL compressés ({len(batches)}) — référence brute"):
+        if st.button("Générer les liens des lots", key=f"bv2_dl_batches_{export_id}"):
+            for f in batches:
+                _link(storage, f)
+
+
+def _history_tab(conn, runner) -> None:
     exports = ss.list_exports(conn, limit=200)
     if not exports:
         st.info("Aucun export pour l'instant.")
         return
-    st.dataframe(pd.DataFrame(exports), use_container_width=True, hide_index=True)
-    st.caption("Journal détaillé de chaque export : onglet Export Monitor. Nettoyage et rétention : sprint 6.")
+    table = [{"Nom": e["name"], "Statut": e["status"], "Attendues": e["expected_count"], "Uniques": e["unique_count"],
+              "Doublons": e["duplicate_count"], "Rejetées": e["error_count"], "Créé le": e["created_at"],
+              "Fini le": e["finished_at"],
+              "Fichiers": "expirés" if e["files_expired_at"] else "",
+              "Filtres": json.dumps(e["config_json"].get("filters", {}), ensure_ascii=False),
+              "Export ID": e["export_id"]} for e in exports]
+    st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
+
+    labels = {e["export_id"]: f"{e['name']} — {e['status']} ({e['export_id']})" for e in exports}
+    export_id = st.selectbox("Actions sur l'export", list(labels), format_func=labels.get, key="bv2_hist_sel")
+    row = ss.get_export(conn, export_id)
+    status, finished = row["status"], row["pagination_finished"]
+    c1, c2, c3 = st.columns(3)
+    if status in ("PAUSED", "FAILED", "INCOMPLETE") and not finished:
+        if c1.button("Reprendre", key="bv2_hist_resume", disabled=runner is None):
+            result = runner.start(export_id)
+            _show_result(result)
+    if status in ("INCOMPLETE", "FAILED") and finished:
+        if c1.button("Valider", key="bv2_hist_validate", disabled=runner is None):
+            result = runner.validate(export_id)
+            _show_result(result)
+    storage = _storage()
+    if status != "COMPLETED" and row["unique_count"] and storage is not None:
+        if c2.button("Générer un fichier partiel", key="bv2_hist_partial"):
+            _partial(conn, storage, export_id)
+    for f in ss.list_files(conn, export_id):
+        if f["kind"] == "csv_partial" and storage is not None:
+            _link(storage, f)
+
+    with c3.popover("Supprimer…"):
+        resumable = status in ("PENDING", "PAUSED", "FAILED", "INCOMPLETE")
+        st.write("Supprime l'export, ses mentions en base et ses fichiers dans Storage. **Irréversible.**")
+        sure = st.checkbox("Je confirme la suppression", key=f"bv2_del_ok_{export_id}")
+        sure_resumable = True
+        if resumable:
+            sure_resumable = st.checkbox("Je sais que cet export est encore reprenable ou validable",
+                                         key=f"bv2_del_ok2_{export_id}")
+        if st.button("Supprimer définitivement", disabled=not (sure and sure_resumable), key=f"bv2_del_{export_id}"):
+            try:
+                finalize.delete_everywhere(conn, storage, export_id, confirm_resumable=resumable and sure_resumable)
+                st.success("Export supprimé.")
+                st.rerun()
+            except (ss.StateError, StorageError) as exc:
+                st.error(mask(str(exc)))
+
+
+def _show_result(result) -> None:
+    if result.ok:
+        st.success(result.message)
+    else:
+        st.error(result.message)
+
+
+def _partial(conn, storage, export_id: str) -> None:
+    import tempfile
+    from pathlib import Path
+
+    with st.spinner("Génération du fichier partiel…"), tempfile.TemporaryDirectory(prefix="bulk_partial_") as tmp:
+        try:
+            record = downloads.build_partial_csv(conn, export_id, storage, Path(tmp))
+        except (StorageError, ss.StateError) as exc:
+            st.error(mask(f"Génération impossible : {exc}"))
+            return
+    ss.replace_files(conn, export_id, [record], kinds=["csv_partial"])
+    ss.add_event(conn, export_id, "WARNING", f"Fichier « DONNÉES PARTIELLES » généré ({record.rows_count} lignes).")
+    st.success(f"Fichier partiel généré : {record.rows_count} lignes, étiqueté « DONNÉES PARTIELLES ».")
 
 
 # ─── Page ─────────────────────────────────────────────────────────────────────
@@ -358,6 +496,13 @@ def main():
             runner.recover(auto_resume=settings.auto_resume)
         except Exception as exc:
             st.warning(mask(f"Vérification des exports interrompus impossible : {exc}"))
+    if conn is not None and settings is not None:
+        try:
+            storage = _storage()
+            if storage is not None:
+                finalize.apply_retention(conn, storage, settings.retention_days)
+        except Exception as exc:
+            st.warning(mask(f"Nettoyage des fichiers expirés impossible : {exc}"))
 
     # Bascule demandée (ex. après « Lancer ») : à faire AVANT d'afficher les widgets concernés.
     goto = st.session_state.pop("bv2_goto", None)
@@ -376,9 +521,9 @@ def main():
         elif tab == TAB_MONITOR:
             _monitor_tab(conn, runner)
         elif tab == TAB_DOWNLOADS:
-            st.info("Téléchargements des exports validés : disponible au sprint 6.")
+            _downloads_tab(conn)
         else:
-            _history_tab(conn)
+            _history_tab(conn, runner)
     finally:
         if conn is not None:
             conn.close()

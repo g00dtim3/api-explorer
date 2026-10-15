@@ -364,3 +364,71 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
 5. Aucun `id` API porté par deux mentions différentes dans cet export : pas d'alerte.
 6. Mesures pour 500 000 mentions : ≈ 500 pages × 3,5 à 4 s ≈ **30 à 35 min** ; ≈ **0,5 à 0,6 Go** de JSON brut
    pendant la collecte (hors index et compression Postgres).
+
+---
+
+## Sprint 6 — Validation, fichiers finaux, téléchargements, rétention (15/10/2026)
+
+### Décisions de l'utilisateur prises avant le sprint
+- **Règle A** pour la complétude : COMPLETED si **toutes les mentions annoncées ont été reçues** et si chaque écart entre
+  « uniques » et « annoncées » est **expliqué et tracé** (doublons listés dans le manifeste avec leurs deux `id`), sans
+  aucune mention rejetée. Cas d'origine : le doublon du premier export réel, le même avis « Syndicated reviews France »
+  au mot près, à la même seconde, sous deux `id` (136236603 et 136556622). C'est très probablement un avis syndiqué
+  deux fois chez le fournisseur.
+- **Jumelles signalées, non bloquantes** (écart avec la spec) : les deux avis sont gardés, rien n'est fusionné.
+- **CSV analytique** (`postprocess_reviews`) reporté au sprint 7.
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/fingerprints.py`, `models.py` | Champ verbatim `content trad` par défaut (constaté sur l'API réelle) ; réglages par défaut **écrits** dans la configuration figée |
+| `bulk_export/storage.py` | Supabase Storage par l'API HTTP : envoi par morceaux de 6 Mo **reprenable** (TUS), lecture en flux, suppression, lien signé ; `LocalStorage` pour les tests |
+| `bulk_export/downloads.py` | Fabrication **en flux** : lots `.jsonl.gz` (référence brute), CSV complet, manifeste, ZIP, CSV « DONNÉES PARTIELLES » |
+| `bulk_export/validation.py` | Les contrôles (tableau ci-dessous), tout en flux |
+| `bulk_export/finalize.py` | VALIDATING → fichiers → contrôles → statut ; effacement des mentions après COMPLETED ; rétention ; suppression |
+| `bulk_export/runner.py` | Validation **enchaînée automatiquement** après la collecte, sous bail ; « Valider » pour la relancer |
+| `bulk_export/migrations/003_files.sql` | Empreinte du contenu des fichiers ; dates d'effacement et d'expiration (**à exécuter dans Supabase**) |
+| `module4_bulk_export_v2.py` | Monitor (résultats de validation, bouton Valider), **Downloads** (liens signés), **History** (filtres, Reprendre, Valider, fichier partiel, Supprimer avec confirmation) |
+| `tests/` | +28 tests : stockage (8), fichiers (5), validation de bout en bout (14), page (1) |
+
+### Les contrôles
+| Contrôle | Comment | Si échec |
+|---|---|---|
+| Pagination terminée | `pagination_finished` | INCOMPLETE |
+| Complétude (règle A) | reçues = annoncées, et uniques + doublons tracés + rejetées = annoncées | INCOMPLETE |
+| Aucune mention rejetée | `error_count` = 0 | INCOMPLETE |
+| Données stables | `/metrics` redemandé à la fin = chiffre du début | INCOMPLETE |
+| Doublons tracés | autant de doublons listés que comptés | FAILED |
+| Intégrité des lots | chaque lot **relu depuis Storage** : empreinte du fichier, empreinte du contenu, nombre de lignes | FAILED |
+| Conservation et unicité | chaque ligne relue = la mention en base **au caractère près**, dans le même ordre, même empreinte. La base interdit deux fois la même empreinte, donc il n'y a pas de doublon dans les lots. | FAILED |
+| Cohérence | lignes relues = uniques = lignes enregistrées ; CSV : lignes = uniques | FAILED |
+| CSV | empreinte relue dans Storage + chaque cellule comparée à la mention en base | FAILED |
+| Jumelles | comptées et signalées | non bloquant |
+| Manifeste et ZIP | relus après envoi, empreinte identique | FAILED |
+
+### Choix techniques
+- **Lots** : `batch_0001.jsonl.gz`… (25 000 mentions par défaut). Chaque ligne = le texte JSON reçu, tel quel.
+- **CSV** : UTF-8 avec BOM (Excel), séparateur virgule, une colonne par champ dans l'ordre d'apparition, textes
+  inchangés, listes et nombres en texte JSON, `null` en cellule vide. Ces règles sont écrites dans le manifeste.
+- **ZIP** : lots décompressés (`.jsonl`), manifeste, CSV.
+- **Après COMPLETED**, les mentions sont effacées de la base (les fichiers validés font référence). La taille
+  moyenne d'une mention est gardée pour les estimations. Rien n'est effacé si la validation échoue.
+- **Rétention** : à l'ouverture de la page, les fichiers des exports COMPLETED de plus de `retention_days` sont
+  supprimés de Storage. La fiche reste dans l'historique, marquée « fichiers expirés ».
+- **Suppression** : impossible pendant qu'un export tourne. Double confirmation pour un export encore reprenable.
+- **Fichier partiel** (export non validé) : nom `DONNEES_PARTIELLES_…csv`, et première ligne « DONNÉES PARTIELLES ».
+- Les tests ont vérifié qu'un lot modifié d'un seul caractère, ou contenant une ligne dupliquée, donne bien FAILED.
+  Contre-épreuve : en désactivant les contrôles, ces deux tests échouent.
+
+### Tests
+- `pytest` : **259 réussis** avec la base de test.
+- **Non testé ici : le vrai Supabase Storage** (le faux serveur reproduit le protocole documenté). À vérifier par
+  vous : premier export validé, téléchargement par lien signé d'un gros fichier sans ralentir l'application.
+
+### Points ouverts
+1. **À faire par vous** : bucket privé `bulk-exports`, limite de taille à 1 Go, clé secrète et `supabase_url` dans les
+   secrets, `003_files.sql` (LISEZMOI §1.3 et §1.6).
+2. L'export de test du 15/10 (« Avene - FR - 26 ») a une configuration d'avant la correction : il ne pourra pas être
+   validé. Supprimez-le depuis History et relancez-le.
+3. Vérifications manuelles du sprint 5 (3 à 5) toujours à faire, idéalement sur un export plus gros.
+4. Sprint 7 : CSV analytique, recette 500 000 mentions, optimisation.

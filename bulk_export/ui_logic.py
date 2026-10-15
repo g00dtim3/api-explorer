@@ -155,6 +155,15 @@ def read_measures(conn) -> Measures:
     avg_bytes, mentions = conn.execute(
         "SELECT avg(octet_length(raw_json)), count(*) FROM (SELECT raw_json FROM raw_mentions LIMIT 20000) s"
     ).fetchone()
+    if not mentions or mentions < 100:
+        # Après COMPLETED, les mentions sont effacées : on reprend la mesure gardée par la validation.
+        total_bytes, total_mentions = conn.execute(
+            """SELECT sum((validation_json #>> '{stats,content_bytes}')::bigint),
+                      sum((validation_json #>> '{stats,mentions}')::bigint)
+               FROM exports WHERE validation_json ? 'stats'"""
+        ).fetchone()
+        if total_mentions:
+            avg_bytes, mentions = float(total_bytes) / float(total_mentions), int(total_mentions)
     return Measures(float(sec) if sec is not None else None, int(intervals or 0),
                     float(avg_bytes) if avg_bytes is not None else None, int(mentions or 0))
 

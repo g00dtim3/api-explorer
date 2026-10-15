@@ -30,6 +30,8 @@ _PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]+"), r"\1" + MASK),
     # Mot de passe dans une URL de connexion : scheme://user:MOTDEPASSE@hote
     (re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^:/\s@]+:)[^@\s]+@"), r"\1" + MASK + "@"),
+    # Nouvelles clés Supabase (secrète / publique)
+    (re.compile(r"\bsb_(?:secret|publishable)_[A-Za-z0-9_-]+"), MASK),
     # Jeton JWT (ex. clé service_role Supabase)
     (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), MASK),
 )

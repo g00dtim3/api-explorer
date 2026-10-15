@@ -42,7 +42,9 @@ ALLOWED_TRANSITIONS: Mapping[ExportStatus, frozenset[ExportStatus]] = MappingPro
     S.RUNNING:    frozenset({S.STOPPING, S.PAUSED, S.FAILED, S.INCOMPLETE}),
     S.STOPPING:   frozenset({S.PAUSED, S.FAILED, S.INCOMPLETE}),
     S.PAUSED:     frozenset({S.RUNNING, S.FAILED}),
-    S.FAILED:     frozenset({S.RUNNING}),
+    # FAILED → VALIDATING : nouvelle validation après un échec de validation (si la pagination est
+    # terminée : contrôlé dans state_store).
+    S.FAILED:     frozenset({S.RUNNING, S.VALIDATING}),
     # INCOMPLETE → RUNNING n'est permis que si la pagination n'est pas terminée
     # (contrôle fait dans state_store, qui connaît pagination_finished).
     S.INCOMPLETE: frozenset({S.VALIDATING, S.RUNNING}),

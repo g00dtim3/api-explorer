@@ -163,3 +163,39 @@ def test_bulk_v2_estimer_lancer_suivre(pg_conn):
     at.run()
     assert not at.exception, at.exception
     assert "Collecte terminée" in all_text(at)
+
+
+@pytest.mark.db
+def test_downloads_et_history(pg_conn, monkeypatch):
+    from bulk_export import state_store as ss
+    from bulk_export.models import ExportConfig
+
+    class SignResp:
+        status_code, headers, content = 200, {}, b""
+
+        def json(self):
+            return {"signedURL": "/object/sign/bulk-exports/x?token=FAKEsigned"}
+
+    monkeypatch.setattr(requests.Session, "request", lambda self, method, url, **kw: SignResp())
+    done = ss.create_export(pg_conn, ExportConfig(name="fake terminé", filters={"brand": "FAKE"}), expected_count=1)
+    pg_conn.execute("UPDATE exports SET status = 'COMPLETED', finished_at = now(), unique_count = 1 "
+                    "WHERE export_id = %s", (done,))
+    ss.replace_files(pg_conn, done, [ss.FileRecord(f"{done}/output/export_complete.csv", "csv_complete", 1, "0" * 64, 2048),
+                                     ss.FileRecord(f"{done}/output/manifest.json", "manifest", None, "1" * 64, 100)])
+    paused = ss.create_export(pg_conn, ExportConfig(name="fake en pause", filters={"brand": "FAKE"}))
+    at = AppTest.from_file(str(REPO / "module4_bulk_export_v2.py"), default_timeout=60)
+    at.secrets["api"] = {"token": FAKE_TOKEN}
+    at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
+                                 "db_schema": "bulk_export_test", "supabase_url": "https://fake.supabase.co",
+                                 "supabase_service_key": "sb_secret_FAKEkey000111"}
+    at.session_state["bv2_tab"] = "Downloads"
+    at.run()
+    assert not at.exception, at.exception
+    links = [e for e in at.get("link_button")]
+    assert len(links) == 2 and "CSV complet" in links[0].proto.label
+    assert "sb_secret_FAKEkey000111" not in all_text(at)
+
+    at.session_state["bv2_tab"] = "Export History"
+    at.run()
+    assert not at.exception, at.exception
+    assert paused in str(at.dataframe[0].value) and done in str(at.dataframe[0].value)

@@ -53,7 +53,8 @@ class ExportRunner:
     def __init__(self, connect: Callable[[], psycopg.Connection],
                  adapter_factory: Callable[[ExportConfig], PaginationAdapter], *,
                  owner: str | None = None, lease_ttl_s: int = DEFAULT_LEASE_TTL_S,
-                 heartbeat_s: float = DEFAULT_HEARTBEAT_S, engine_kwargs: dict[str, Any] | None = None):
+                 heartbeat_s: float = DEFAULT_HEARTBEAT_S, engine_kwargs: dict[str, Any] | None = None,
+                 storage_factory: Callable[[], Any] | None = None):
         if heartbeat_s >= lease_ttl_s:
             raise ValueError("Le battement de cœur doit être plus fréquent que la durée du bail.")
         self._connect = connect
@@ -62,6 +63,8 @@ class ExportRunner:
         self.lease_ttl_s = lease_ttl_s
         self.heartbeat_s = heartbeat_s
         self._engine_kwargs = engine_kwargs or {}
+        # Stockage des fichiers finaux (Supabase Storage). Sans lui, la validation ne peut pas se faire.
+        self._storage_factory = storage_factory
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -88,17 +91,30 @@ class ExportRunner:
     # ─── Ordres ──────────────────────────────────────────────────────────────
 
     def start(self, export_id: str) -> StartResult:
-        """Démarre ou reprend un export. Réponse immédiate : refusé, ou lancé en tâche de fond."""
+        """Démarre ou reprend un export. Réponse immédiate : refusé, ou lancé en tâche de fond.
+        Quand la collecte se termine, la validation s'enchaîne automatiquement."""
+        return self._launch(export_id, validate_only=False)
+
+    def validate(self, export_id: str) -> StartResult:
+        """(Re)lance la validation d'un export dont la collecte est terminée."""
+        return self._launch(export_id, validate_only=True)
+
+    def _launch(self, export_id: str, *, validate_only: bool) -> StartResult:
         with self._lock:
             if self.is_busy():
                 return StartResult(False, f"Un export tourne déjà dans cette application ({self._export_id}).")
             conn = self._connect()
             try:
                 row = ss.get_export(conn, export_id)
-                if row["status"] not in RESUMABLE:
+                if validate_only:
+                    if not (row["pagination_finished"] and row["status"] in (S.INCOMPLETE.value, S.FAILED.value)):
+                        return StartResult(False, f"Statut {row['status']} : rien à valider.")
+                    if self._storage_factory is None:
+                        return StartResult(False, "Stockage non configuré (supabase_url, supabase_service_key).")
+                elif row["status"] not in RESUMABLE:
                     return StartResult(False, f"Statut {row['status']} : cet export ne peut pas être (re)lancé.")
-                if row["status"] == S.INCOMPLETE.value and row["pagination_finished"]:
-                    return StartResult(False, "Collecte déjà terminée : l'export attend sa validation.")
+                elif row["status"] in (S.INCOMPLETE.value, S.FAILED.value) and row["pagination_finished"]:
+                    return StartResult(False, "Collecte déjà terminée : utilisez « Valider ».")
                 ss.get_config(conn, export_id)  # refuse une configuration altérée (empreinte)
                 if not ss.acquire_lease(conn, export_id, self.owner, self.lease_ttl_s):
                     return StartResult(False, "Un autre export est en cours, ou celui-ci est tenu ailleurs.")
@@ -110,10 +126,11 @@ class ExportRunner:
             self._stop_event = threading.Event()
             self._export_id = export_id
             self.last_result = None
-            self._thread = threading.Thread(target=self._run, args=(export_id, self._stop_event),
+            self._thread = threading.Thread(target=self._run, args=(export_id, self._stop_event, validate_only),
                                             name=f"bulk-export-{export_id}", daemon=True)
             self._thread.start()
-            return StartResult(True, "Export lancé en arrière-plan.")
+            return StartResult(True, "Validation lancée en arrière-plan." if validate_only
+                               else "Export lancé en arrière-plan.")
 
     def request_stop(self, export_id: str) -> None:
         """« Arrêter après la page en cours » : drapeau en base (et signal local si c'est notre export)."""
@@ -141,16 +158,19 @@ class ExportRunner:
 
     # ─── Tâche de fond ───────────────────────────────────────────────────────
 
-    def _run(self, export_id: str, stop_event: threading.Event) -> None:
+    def _run(self, export_id: str, stop_event: threading.Event, validate_only: bool = False) -> None:
         heartbeat_stop = threading.Event()
         heartbeat = threading.Thread(target=self._heartbeat, args=(export_id, heartbeat_stop),
                                      name=f"bulk-heartbeat-{export_id}", daemon=True)
         heartbeat.start()
         try:
-            engine = ExportEngine(self._connect, self._adapter_factory, owner=self.owner,
-                                  lease_ttl_s=self.lease_ttl_s, **self._engine_kwargs)
-            self.last_result = engine.run(export_id, should_stop=stop_event.is_set)
-            logger.info("Export %s : %s (%s)", export_id, self.last_result.outcome, self.last_result.message)
+            if not validate_only:
+                engine = ExportEngine(self._connect, self._adapter_factory, owner=self.owner,
+                                      lease_ttl_s=self.lease_ttl_s, **self._engine_kwargs)
+                self.last_result = engine.run(export_id, should_stop=stop_event.is_set)
+                logger.info("Export %s : %s (%s)", export_id, self.last_result.outcome, self.last_result.message)
+            if validate_only or self.last_result.outcome in ("FINISHED", "NOTHING_TO_DO"):
+                self._finalize(export_id)
         except Exception as exc:  # ex. base injoignable au démarrage : jamais de tâche morte en silence
             logger.exception("Tâche d'export %s arrêtée par une erreur imprévue", export_id)
             self._mark_failed(export_id, exc)
@@ -158,14 +178,38 @@ class ExportRunner:
             heartbeat_stop.set()
             heartbeat.join(timeout=5)
 
+    def _finalize(self, export_id: str) -> None:
+        """Validation dans la même tâche de fond, sous bail (collecte → validation sans interruption)."""
+        from bulk_export.finalize import finalize
+
+        conn = self._connect()
+        try:
+            if self._storage_factory is None:
+                ss.add_event(conn, export_id, "WARNING", "Stockage non configuré : validation impossible "
+                             "(renseignez supabase_url et supabase_service_key).")
+                return
+            if not ss.acquire_lease(conn, export_id, self.owner, self.lease_ttl_s):
+                ss.add_event(conn, export_id, "WARNING", "Validation non lancée : un autre export est en cours.")
+                return
+            try:
+                config = ss.get_config(conn, export_id)
+                result = finalize(conn, export_id, self._storage_factory(), self._adapter_factory(config),
+                                  check_lease=lambda: ss.renew_lease(conn, export_id, self.owner, self.lease_ttl_s))
+                logger.info("Validation de %s : %s %s", export_id, result.status, result.message)
+            finally:
+                ss.release_lease(conn, export_id, self.owner)
+        finally:
+            conn.close()
+
     def _heartbeat(self, export_id: str, stop: threading.Event) -> None:
         conn: psycopg.Connection | None = None
         while not stop.wait(self.heartbeat_s):
             try:
                 if conn is None or conn.closed:
                     conn = self._connect()
-                if not ss.renew_lease(conn, export_id, self.owner, self.lease_ttl_s):
-                    return  # bail rendu (fin d'export) ou perdu : rien à prolonger
+                # Un refus (bail rendu entre la collecte et la validation) n'arrête pas le battement :
+                # il reprend dès que la validation a repris le bail.
+                ss.renew_lease(conn, export_id, self.owner, self.lease_ttl_s)
             except Exception as exc:
                 logger.warning("Battement de cœur de %s manqué : %s", export_id, mask(exc))
                 if conn is not None:
@@ -208,4 +252,12 @@ def build_runner(settings, credentials, **kwargs: Any) -> ExportRunner:
         http = RatingsReviewsHttpClient(credentials.token, base_url=credentials.base_url)
         return RatingsReviewsAdapter(http, config.filters, rows=config.rows, pagination=config.pagination)
 
+    storage_factory = None
+    if settings.supabase_url and settings.supabase_service_key:
+        from bulk_export.storage import build_storage
+
+        def storage_factory():
+            return build_storage(settings)
+
+    kwargs.setdefault("storage_factory", storage_factory)
     return ExportRunner(connect, adapter_factory, **kwargs)

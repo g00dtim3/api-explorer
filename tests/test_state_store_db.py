@@ -96,6 +96,11 @@ def test_transition_interdite_refusee_en_base(pg_conn):
 def test_completed_exige_une_validation_reussie(pg_conn):
     export_id = running_export(pg_conn)
     ss.set_status(pg_conn, export_id, S.INCOMPLETE)
+    with pytest.raises(ss.StateError, match="collecte n'est pas terminée"):
+        ss.set_status(pg_conn, export_id, S.VALIDATING)
+    ss.set_status(pg_conn, export_id, S.RUNNING)
+    ss.commit_page(pg_conn, export_id, "fake-owner", page(1, "*", "*", [], pagination_finished=True))
+    ss.set_status(pg_conn, export_id, S.INCOMPLETE)
     ss.set_status(pg_conn, export_id, S.VALIDATING)
     with pytest.raises(ss.StateError, match="validation"):
         ss.set_status(pg_conn, export_id, S.COMPLETED)

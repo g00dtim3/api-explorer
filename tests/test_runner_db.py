@@ -149,7 +149,7 @@ def test_statut_non_reprenable_refuse(pg_conn, connect):
     runner = make_runner(connect, FakePagedServer(fake_pages()))
     assert runner.start(export_id).ok and runner.wait(10)
     again = runner.start(export_id)
-    assert not again.ok and "validation" in again.message
+    assert not again.ok and "Valider" in again.message
 
 
 def test_configuration_alteree_refusee(pg_conn, connect):

@@ -25,7 +25,8 @@ enregistrée n'est perdue** : il reprend exactement là où il s'était arrêté
 | **Redémarrage, redéploiement ou mise en veille** de l'application (Streamlit Cloud endort une application inutilisée) | La tâche de fond meurt. Au bout de **2 minutes au plus**, l'export est reconnu comme « interrompu » et passe en **PAUSED** dès que quelqu'un ouvre la page. | Cliquer sur **Reprendre**. Si l'option de reprise automatique est activée, c'est fait tout seul. |
 | Vous cliquez sur **Arrêter après la page en cours** | La page en cours est terminée et enregistrée, puis l'export passe en **PAUSED**. | **Reprendre** quand vous voulez |
 | Erreur persistante de l'API ou réponse anormale | L'export passe en **FAILED**, avec le diagnostic dans le journal. | Lire le journal, puis **Reprendre** |
-| Fin de la pagination | **INCOMPLETE** : la collecte est finie, mais elle n'est pas encore vérifiée. | Lancer la validation (sprint 6). Seule une validation réussie donne **COMPLETED**. |
+| Fin de la pagination | La **validation s'enchaîne automatiquement** (VALIDATING) : fabrication des fichiers, envoi dans Storage, relecture, contrôles. | Rien : **COMPLETED** si tout est prouvé ; sinon INCOMPLETE ou FAILED, avec la raison dans le Monitor, et le bouton **Valider** pour relancer |
+| Redémarrage pendant la validation | L'export revient à **INCOMPLETE** (aucune donnée perdue : les mentions restent en base jusqu'à COMPLETED) | **Valider** |
 
 ## Pourquoi rien n'est perdu à la reprise
 Chaque page de l'API est enregistrée **d'un seul bloc** avec son point de reprise : soit tout est écrit, soit rien.

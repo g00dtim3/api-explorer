@@ -124,7 +124,8 @@ def list_exports(conn: psycopg.Connection, limit: int = 100) -> list[dict[str, A
     with conn.cursor(row_factory=dict_row) as cur:
         return cur.execute(
             """SELECT export_id, name, status, expected_count, unique_count, duplicate_count,
-                      collision_count, error_count, pages_count, created_at, last_updated_at, finished_at
+                      collision_count, error_count, pages_count, created_at, last_updated_at, finished_at,
+                      pagination_finished, raw_purged_at, files_expired_at, config_json
                FROM exports ORDER BY created_at DESC LIMIT %s""",
             (int(limit),),
         ).fetchall()
@@ -154,6 +155,8 @@ def set_status(conn: psycopg.Connection, export_id: str, new_status: ExportStatu
             if current is ExportStatus.INCOMPLETE and new_status is ExportStatus.RUNNING \
                     and row["pagination_finished"]:
                 raise StateError("Pagination déjà terminée : l'export ne peut pas repartir en collecte.")
+            if new_status is ExportStatus.VALIDATING and not row["pagination_finished"]:
+                raise StateError("Validation impossible : la collecte n'est pas terminée.")
             if new_status is ExportStatus.COMPLETED and (row["validation_json"] or {}).get("passed") is not True:
                 raise StateError("COMPLETED refusé : aucune validation réussie n'est enregistrée.")
 
@@ -372,27 +375,28 @@ ORPHAN_MESSAGE = "Interrompu par un redémarrage de l'application — reprenable
 
 def recover_orphans(conn: psycopg.Connection) -> list[str]:
     """Exports en RUNNING / STOPPING dont plus personne ne tient le bail (expiré ou absent)
-    → PAUSED, avec un événement. Renvoie leurs identifiants. Un export dont le bail est valide
-    n'est jamais touché."""
+    → PAUSED ; en VALIDATING → INCOMPLETE (la validation se relance). Avec un événement.
+    Renvoie leurs identifiants. Un export dont le bail est valide n'est jamais touché."""
     recovered: list[str] = []
     with conn.transaction():
         with conn.cursor() as cur:
             rows = cur.execute(
                 """SELECT export_id, status FROM exports
-                   WHERE status IN ('RUNNING', 'STOPPING')
+                   WHERE status IN ('RUNNING', 'STOPPING', 'VALIDATING')
                      AND (lease_expires_at IS NULL OR lease_expires_at <= now())
                    ORDER BY last_updated_at DESC
                    FOR UPDATE SKIP LOCKED"""
             ).fetchall()
             for export_id, status in rows:
-                check_transition(status, ExportStatus.PAUSED)
+                target = ExportStatus.INCOMPLETE if status == "VALIDATING" else ExportStatus.PAUSED
+                check_transition(status, target)
                 cur.execute(
-                    """UPDATE exports SET status = 'PAUSED', stop_requested = FALSE, lease_owner = NULL,
+                    """UPDATE exports SET status = %s, stop_requested = FALSE, lease_owner = NULL,
                               lease_expires_at = NULL, last_updated_at = now()
                        WHERE export_id = %s""",
-                    (export_id,),
+                    (target.value, export_id),
                 )
-                _insert_event(cur, export_id, "WARNING", f"{ORPHAN_MESSAGE} (statut {status} → PAUSED)")
+                _insert_event(cur, export_id, "WARNING", f"{ORPHAN_MESSAGE} (statut {status} → {target.value})")
                 recovered.append(export_id)
     return recovered
 
@@ -441,3 +445,125 @@ def _mask_json(value: Any) -> Any:
     if isinstance(value, str):
         return mask(value)
     return value
+
+
+# ─── Fichiers finaux, lecture en flux, rétention (sprint 6) ───────────────────
+
+@dataclass(frozen=True)
+class FileRecord:
+    path: str                       # chemin dans le bucket
+    kind: str                       # batch_jsonl, csv_complete, zip, manifest, csv_partial
+    rows_count: int | None
+    sha256: str                     # empreinte du fichier envoyé
+    size_bytes: int
+    content_sha256: str | None = None  # empreinte du contenu non compressé (lots .gz)
+    content_bytes: int | None = None
+
+
+def iter_mentions(conn: psycopg.Connection, export_id: str, chunk: int = 5000):
+    """(seq, mention_id, raw_json) dans l'ordre d'arrivée, par paquets : jamais tout en mémoire."""
+    validate_export_id(export_id)
+    last = 0
+    while True:
+        rows = conn.execute(
+            """SELECT seq, mention_id, raw_json FROM raw_mentions
+               WHERE export_id = %s AND seq > %s ORDER BY seq LIMIT %s""",
+            (export_id, last, int(chunk)),
+        ).fetchall()
+        if not rows:
+            return
+        yield from rows
+        last = rows[-1][0]
+
+
+def list_duplicates(conn: psycopg.Connection, export_id: str) -> list[dict[str, Any]]:
+    """Doublons tracés, avec l'`id` API de la copie gardée et de la copie écartée (manifeste, règle A)."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        return cur.execute(
+            """SELECT c.page_no, c.mention_id, m.api_id AS kept_api_id, c.api_id AS dropped_api_id
+               FROM conflicts c LEFT JOIN raw_mentions m USING (export_id, mention_id)
+               WHERE c.export_id = %s AND c.kind = 'duplicate' ORDER BY c.conflict_no""",
+            (validate_export_id(export_id),),
+        ).fetchall()
+
+
+def count_conflicts(conn: psycopg.Connection, export_id: str, kind: str) -> int:
+    return conn.execute("SELECT count(*) FROM conflicts WHERE export_id = %s AND kind = %s",
+                        (validate_export_id(export_id), kind)).fetchone()[0]
+
+
+def replace_files(conn: psycopg.Connection, export_id: str, records: Sequence[FileRecord],
+                  kinds: Sequence[str] | None = None) -> None:
+    """Remplace la liste des fichiers d'un export (tous, ou seulement certains types)."""
+    validate_export_id(export_id)
+    with conn.transaction():
+        if kinds is None:
+            conn.execute("DELETE FROM files WHERE export_id = %s", (export_id,))
+        else:
+            conn.execute("DELETE FROM files WHERE export_id = %s AND kind = ANY(%s)", (export_id, list(kinds)))
+        with conn.cursor() as cur:
+            cur.executemany(
+                """INSERT INTO files (export_id, path, kind, rows_count, sha256, size_bytes, content_sha256, content_bytes)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (export_id, path) DO UPDATE SET kind = EXCLUDED.kind, rows_count = EXCLUDED.rows_count,
+                       sha256 = EXCLUDED.sha256, size_bytes = EXCLUDED.size_bytes,
+                       content_sha256 = EXCLUDED.content_sha256, content_bytes = EXCLUDED.content_bytes,
+                       created_at = now()""",
+                [(export_id, f.path, f.kind, f.rows_count, f.sha256, f.size_bytes, f.content_sha256, f.content_bytes)
+                 for f in records],
+            )
+
+
+def list_files(conn: psycopg.Connection, export_id: str) -> list[dict[str, Any]]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        return cur.execute("SELECT * FROM files WHERE export_id = %s ORDER BY kind, path",
+                           (validate_export_id(export_id),)).fetchall()
+
+
+def purge_raw_mentions(conn: psycopg.Connection, export_id: str) -> int:
+    """Après COMPLETED seulement : les fichiers validés dans Storage font référence."""
+    validate_export_id(export_id)
+    with conn.transaction():
+        status = conn.execute("SELECT status FROM exports WHERE export_id = %s FOR UPDATE",
+                              (export_id,)).fetchone()
+        if status is None or status[0] != ExportStatus.COMPLETED.value:
+            raise StateError("Les mentions ne sont effacées qu'après COMPLETED.")
+        deleted = conn.execute("DELETE FROM raw_mentions WHERE export_id = %s", (export_id,)).rowcount
+        conn.execute("UPDATE exports SET raw_purged_at = now(), last_updated_at = now() WHERE export_id = %s",
+                     (export_id,))
+        add_event(conn, export_id, "INFO", f"{deleted} mentions effacées de la base (les fichiers validés font référence).")
+    return deleted
+
+
+def exports_with_expired_files(conn: psycopg.Connection, retention_days: int) -> list[str]:
+    rows = conn.execute(
+        """SELECT export_id FROM exports
+           WHERE status = 'COMPLETED' AND files_expired_at IS NULL
+             AND finished_at < now() - make_interval(days => %s)""",
+        (int(retention_days),),
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def mark_files_expired(conn: psycopg.Connection, export_id: str) -> None:
+    with conn.transaction():
+        conn.execute("DELETE FROM files WHERE export_id = %s", (validate_export_id(export_id),))
+        conn.execute("UPDATE exports SET files_expired_at = now(), last_updated_at = now() WHERE export_id = %s",
+                     (export_id,))
+        add_event(conn, export_id, "INFO", "Fichiers supprimés de Storage (durée de conservation dépassée).")
+
+
+def delete_export(conn: psycopg.Connection, export_id: str, *, confirm_resumable: bool = False) -> None:
+    """Supprime un export et tout ce qui en dépend en base. Les fichiers Storage sont supprimés
+    par l'appelant AVANT (il connaît le stockage). Refusé si l'export tourne ; un export encore
+    reprenable demande une confirmation explicite."""
+    row = get_export(conn, export_id)
+    lease_valid = conn.execute("SELECT lease_expires_at > now() FROM exports WHERE export_id = %s",
+                               (export_id,)).fetchone()[0]
+    if row["lease_owner"] and lease_valid:
+        raise StateError("Export en cours : arrêtez-le avant de le supprimer.")
+    resumable = row["status"] in ("PENDING", "PAUSED", "FAILED") or (
+        row["status"] == "INCOMPLETE")
+    if resumable and not confirm_resumable:
+        raise StateError("Cet export est encore reprenable ou validable : confirmation explicite nécessaire.")
+    conn.execute("DELETE FROM exports WHERE export_id = %s", (export_id,))
