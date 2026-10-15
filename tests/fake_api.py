@@ -43,7 +43,7 @@ def ok(result):
 
 def fake_doc(n):
     return {"id": str(n), "brand": "FAKE_BRAND", "date": "2024-11-28T15:45:28Z", "product": "fake product",
-            "verbatim content": f"fake verbatim é {n}", "rating": 5, "attributes": None}
+            "content trad": f"fake verbatim é {n}", "rating": 5, "attributes": None}
 
 
 def page(docs, cursor, nb=None):

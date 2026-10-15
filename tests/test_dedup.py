@@ -7,8 +7,8 @@ from bulk_export import dedup
 from bulk_export.fingerprints import compute
 
 fake_a = {"id": "1", "brand": "FAKE", "date": "2024-11-28T15:45:28Z", "product": "p", "rating": 5,
-          "verbatim content": "fake a"}
-fake_b = {**fake_a, "id": "2", "verbatim content": "fake b"}
+          "content trad": "fake a"}
+fake_b = {**fake_a, "id": "2", "content trad": "fake b"}
 
 
 def classify(records, known_raw=(), known_content=None):
@@ -57,7 +57,7 @@ def test_sans_date_rejetee_et_gardee_telle_quelle():
 
 
 def test_mentions_jamais_modifiees_et_json_fidele():
-    record = {**fake_a, "verbatim content": "  é è 🙂 \"guillemets\"\n; retour  ", "liste": [1, None]}
+    record = {**fake_a, "content trad": "  é è 🙂 \"guillemets\"\n; retour  ", "liste": [1, None]}
     original = copy.deepcopy(record)
     page = classify([record])
     assert record == original

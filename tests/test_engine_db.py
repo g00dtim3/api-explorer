@@ -26,7 +26,7 @@ fake_config = ExportConfig(name="fake moteur", filters={"brand": "FAKE_BRAND"}, 
 def fake_doc(n, **extra):
     return {"id": str(n), "brand": "FAKE_BRAND", "date": f"2024-11-{(n % 28) + 1:02d}T10:00:00Z",
             "product": "fake product", "country": "France", "source": "Fake", "rating": (n % 5) + 1,
-            "verbatim content": f"fake verbatim {n}", **extra}
+            "content trad": f"fake verbatim {n}", **extra}
 
 
 def fake_pages(total=8, size=3):
@@ -80,7 +80,7 @@ def test_champs_au_journal_sans_valeurs(pg_conn, connect):
     export_id = ss.create_export(pg_conn, fake_config)
     make_engine(connect, server).run(export_id)
     log = events(pg_conn, export_id)
-    assert any(m.startswith("Champs reçus : brand, country, date, id, product, rating, source, verbatim content")
+    assert any(m.startswith("Champs reçus : brand, content trad, country, date, id, product, rating, source")
                for m in log)
     assert not any("fake verbatim" in m for m in log)
 
@@ -110,8 +110,8 @@ def test_mention_sans_date_rejetee_et_gardee(pg_conn, connect):
 
 
 def test_verbatims_speciaux_relus_identiques(pg_conn, connect):
-    docs = [fake_doc(1, **{"verbatim content": "Accents é è à ç, emoji 🙂👍, \"guillemets\", ; \n\r\t retour  "}),
-            fake_doc(2, **{"verbatim content": "é échappé \\ antislash", "attributes": ["Texture", None]})]
+    docs = [fake_doc(1, **{"content trad": "Accents é è à ç, emoji 🙂👍, \"guillemets\", ; \n\r\t retour  "}),
+            fake_doc(2, **{"content trad": "é échappé \\ antislash", "attributes": ["Texture", None]})]
     server = FakePagedServer([docs])
     export_id = ss.create_export(pg_conn, fake_config)
     make_engine(connect, server).run(export_id)

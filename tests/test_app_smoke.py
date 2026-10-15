@@ -29,7 +29,7 @@ LISTS = {
 
 
 FAKE_DOCS = [{"id": str(n), "brand": "FAKE_BRAND", "date": "2024-11-28T10:00:00Z", "product": "fake",
-              "verbatim content": f"fake verbatim {n}"} for n in range(1, 4)]
+              "content trad": f"fake verbatim {n}"} for n in range(1, 4)]
 
 
 def _result(path, params):

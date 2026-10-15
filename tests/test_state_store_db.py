@@ -21,7 +21,7 @@ fake_config = ExportConfig(name="fake export", filters={"brand": "FAKE_BRAND"})
 
 def fake_mention(n: int) -> dict:
     return {"id": str(n), "brand": "FAKE_BRAND", "date": "2024-11-28T15:45:28Z", "product": "fake product",
-            "country": "France", "source": "Fake Source", "rating": 5, "verbatim content": f"fake verbatim {n}"}
+            "country": "France", "source": "Fake Source", "rating": 5, "content trad": f"fake verbatim {n}"}
 
 
 def mention_row(record: dict) -> ss.MentionRow:
@@ -152,7 +152,7 @@ def test_commit_page_enregistre_tout(pg_conn):
 
 def test_raw_json_conserve_a_l_identique(pg_conn):
     export_id = running_export(pg_conn)
-    record = {**fake_mention(1), "verbatim content": "  Accents é è, emoji 🙂, guillemets \" et ; \n retour  "}
+    record = {**fake_mention(1), "content trad": "  Accents é è, emoji 🙂, guillemets \" et ; \n retour  "}
     row = mention_row(record)
     ss.commit_page(pg_conn, export_id, "fake-owner",
                    ss.PageCommit(page_no=1, cursor_sent="*", cursor_received="C1", records_count=1, new_mentions=[row]))

@@ -168,5 +168,10 @@ def test_reglage_pagination_invalide(reglage):
 
 def test_reglages_figes_dans_la_configuration():
     c = ExportConfig(name="fake", filters={"brand": "FAKE"}, pagination={"on_empty_page": "error"})
-    assert ExportConfig.from_json(c.to_json()).pagination == {"on_empty_page": "error"}
+    relu = ExportConfig.from_json(c.to_json())
+    assert relu.pagination["on_empty_page"] == "error"
+    # Les valeurs par défaut sont écrites en toutes lettres dans la configuration.
+    assert relu.pagination["on_same_cursor_with_records"] == "end_with_warning"
+    assert relu.fingerprint["verbatim_field"] == "content trad"
+    assert '"verbatim_field":"content trad"' in c.to_json()
     assert c.config_hash != ExportConfig(name="fake", filters={"brand": "FAKE"}).config_hash

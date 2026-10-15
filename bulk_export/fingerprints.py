@@ -25,8 +25,9 @@ from typing import Any, Mapping
 DEFAULT_SETTINGS: Mapping[str, Any] = {
     # Champs ignorés pour raw_hash : l'API régénère `id` à chaque export.
     "raw_hash_exclude": ("id",),
-    # Champ verbatim utilisé pour content_key (nom documenté par le fournisseur).
-    "verbatim_field": "verbatim content",
+    # Champ verbatim utilisé pour content_key. Constaté sur l'API réelle le 15/10/2026 : `content trad`
+    # et `content origin` existent, `verbatim content` (nom de la documentation) n'existe pas.
+    "verbatim_field": "content trad",
     # Champ verbatim que lit Compass : le format plat renomme `content trad` en `verbatim_content`.
     "compass_verbatim_field": "content trad",
 }
@@ -140,7 +141,7 @@ def _compass_fields(record: Mapping[str, Any], verbatim: Any, date_text: str) ->
     )
 
 
-def content_key(record: Mapping[str, Any], verbatim_field: str = "verbatim content") -> str:
+def content_key(record: Mapping[str, Any], verbatim_field: str = "content trad") -> str:
     """Méthode Compass, mais avec la date au jour (``AAAA-MM-JJ``, dans le fuseau de la donnée)."""
     day = _parse_date(record.get("date")).date().isoformat()
     return compass_verbatim_hash(*_compass_fields(record, record.get(verbatim_field), day))

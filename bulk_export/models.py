@@ -178,15 +178,17 @@ class ExportConfig:
         from bulk_export.api_adapter import merged_pagination
         from bulk_export.fingerprints import merged_settings
         try:
-            merged_settings(self.fingerprint)
-            merged_pagination(self.pagination)
+            # Les valeurs par défaut sont ÉCRITES dans la configuration : un futur changement de
+            # valeur par défaut ne modifiera jamais en silence un export déjà créé.
+            fingerprint = merged_settings(self.fingerprint)
+            pagination = merged_pagination(self.pagination)
         except ValueError as exc:
             raise ConfigError(str(exc)) from None
 
         # Rendre les dictionnaires non modifiables après création.
         object.__setattr__(self, "filters", MappingProxyType(dict(sorted(clean.items()))))
-        object.__setattr__(self, "fingerprint", MappingProxyType(dict(self.fingerprint)))
-        object.__setattr__(self, "pagination", MappingProxyType(dict(self.pagination)))
+        object.__setattr__(self, "fingerprint", MappingProxyType(fingerprint))
+        object.__setattr__(self, "pagination", MappingProxyType(pagination))
         object.__setattr__(self, "output_formats", tuple(sorted(set(formats))))
 
     # — Sérialisation —
