@@ -42,3 +42,27 @@ def test_schema_invalide(schema):
 def test_retention_invalide():
     with pytest.raises(SettingsError, match="retention_days"):
         load_settings({"database_url": fake_url, "retention_days": "beaucoup"})
+
+
+# ─── Token de l'API ───────────────────────────────────────────────────────────
+
+from bulk_export.settings import load_api_credentials  # noqa: E402
+
+
+def test_token_api_depuis_environnement(monkeypatch):
+    monkeypatch.setenv("BULK_EXPORT_API_TOKEN", "FAKE_env_token_123")
+    creds = load_api_credentials(use_streamlit=False)
+    assert creds.token == "FAKE_env_token_123"
+    assert "FAKE_env_token_123" not in repr(creds)
+    assert "FAKE_env_token_123" not in mask("appel ?x=FAKE_env_token_123")
+
+
+def test_token_api_manquant(monkeypatch):
+    monkeypatch.delenv("BULK_EXPORT_API_TOKEN", raising=False)
+    with pytest.raises(SettingsError, match="token"):
+        load_api_credentials(use_streamlit=False)
+
+
+def test_base_url_https_obligatoire():
+    with pytest.raises(SettingsError, match="base_url"):
+        load_api_credentials({"token": "FAKE_tok_456789", "base_url": "http://exemple.test"})

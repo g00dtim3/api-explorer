@@ -122,3 +122,47 @@
 ### Action humaine
 - Suivre `docs/bulk_v2/LISEZMOI.md` §1 : vérifier la région UE, exécuter `001_init.sql`, renseigner `[bulk_export]`
   dans les secrets Streamlit.
+
+---
+
+## Sprint 2 — Client API robuste et adaptateur de pagination (15/10/2026)
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/api_http.py` | Appel HTTP **sans cache**, avec délais maximaux (10 s pour la connexion, 120 s pour la lecture). Chaque erreur est une exception typée : accès refusé, trop de requêtes, panne passagère, requête refusée, réponse mal formée. L'adresse appelée, qui contient le token, n'est jamais affichée. Mesure le temps de réponse et la taille de chaque page. |
+| `bulk_export/retry.py` | Nouvelles tentatives limitées (5), avec un délai qui double plus une part de hasard, et le respect de `Retry-After` (plafond de 5 min). Aucune nouvelle tentative sur un accès refusé ou une réponse mal formée. |
+| `bulk_export/api_adapter.py` | Contrat générique (`PageResult`, `PaginationAdapter`) et version Ratings & Reviews : curseur `*`, mêmes filtres pour `/metrics` et `/reviews`, `random` jamais envoyé, règle de fin réglable, plafond de pages calculé |
+| `bulk_export/settings.py` | Lecture du token de l'API : `[api] token` (comme l'application) ou `BULK_EXPORT_API_TOKEN` |
+| `bulk_export/models.py` | Réglages de pagination figés dans la configuration d'export |
+| `tests/` | +69 tests : faux serveur API (`tests/fake_api.py`), client HTTP, nouvelles tentatives, adaptateur, et **premier test de non-régression des modules 1 à 3** |
+
+### Règle de fin retenue et sa source
+Voir `audit_api.md` §5. **Source : déduction de l'audit et comportement du module 3. Non confirmée par le
+fournisseur.** Par défaut :
+- curseur identique et page vide : fin normale ;
+- curseur identique avec des mentions, ou page vide avec un autre curseur : fin, avec un avertissement au journal ;
+- mentions sans curseur suivant : erreur ;
+- plus de pages que prévu : erreur.
+
+Ces deux cas ambigus sont réglables (`error` au lieu de fin), et figés avec chaque export.
+
+### Décisions
+- **`api_client.py` n'est pas modifié** : sa lecture du token à l'import, son cache d'une heure et son affichage
+  d'erreurs auraient dû changer, avec un risque pour les modules 1 à 3. Le nouveau client reprend la même adresse et
+  le même encodage (environ 5 lignes dupliquées). Un test vérifie que `api_client` répond toujours exactement comme avant.
+- **Pas de fonction « identifiant de mention »** dans l'adaptateur, puisque l'`id` de l'API n'est pas fiable
+  (`decision_identifiant.md`). L'unicité repose sur les empreintes du sprint 1.
+- Un JSON illisible avec un code 200 est traité comme une panne passagère (transfert probablement interrompu) ; un
+  JSON lisible mais de forme inattendue est une erreur définitive.
+- Les mentions reçues sont transmises **sans aucune modification** (test dédié).
+
+### Tests
+- `pytest` : **174 réussis** avec la base Postgres de test ; sans base, 154 réussis et 20 sautés.
+- Aucun appel réel à l'API : le token n'est pas sur la machine de développement.
+
+### Points ouverts
+1. Les inconnues de l'API (nom du champ verbatim, comportement réel de fin, répétition des `id`, taille et temps par
+   page) seront mesurées au **premier export réel** (sprint 3). Les mesures sont prêtes dans `PageResult.raw_meta`.
+2. Le plafond de 5 minutes pour `Retry-After` est un choix par défaut, à ajuster si l'API impose des pauses plus longues.
+3. Points ouverts du sprint 1 toujours valables (origine du fichier Compass, mise à jour de `CLAUDE.md`).

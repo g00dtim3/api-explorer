@@ -97,19 +97,27 @@ Taille réelle d'une mention et temps de réponse : **inconnus**. Formules à ap
 
 L'ordre de grandeur « ~1 Go » indiqué dans `ADAPTATION_SUPABASE.md` §6 reste **une hypothèse non vérifiée**.
 
-## 5. Règle de fin de pagination proposée (provisoire, configurable)
+## 5. Règle de fin de pagination retenue (sprint 2) — provisoire et réglable
 
-Puisque la documentation ne décrit pas la fin, le moteur appliquera ceci, en attendant la réponse du fournisseur :
+**Source :** déduction de l'audit (documentation muette sur ce point) et comportement du module 3 actuel.
+**Non confirmée par le fournisseur** (questions n°1 et 2). Implémentée dans `bulk_export/api_adapter.py`. Les réglages
+sont figés dans la configuration de chaque export (`ExportConfig.pagination`), pour savoir après coup quelle règle a
+été appliquée.
 
-| Situation | Interprétation proposée | Statut final possible |
-|---|---|---|
-| `nextCursorMark` renvoyé **identique** au curseur envoyé | Fin normale (convention habituelle de ce type de curseur, déjà utilisée par le module 3) | → contrôles de validation |
-| Page **vide** (`docs` vide) avec un curseur | Fin probable, **à signaler** dans le journal | → contrôles de validation |
-| `nextCursorMark` **absent** alors que `docs` n'est pas vide | **Anomalie** | FAILED (reprenable) |
-| `status` ≠ `success`, code HTTP ≠ 200, JSON illisible | **Erreur**, jamais une fin | Nouvelle tentative, puis FAILED |
-| Nombre de pages > `nbDocs / rows` + marge | **Anomalie** (protection contre une boucle infinie) | FAILED |
+| Situation | Réglage | Par défaut | Autre valeur possible |
+|---|---|---|---|
+| Curseur renvoyé **identique**, page **vide** | — | **Fin normale** | — |
+| Curseur renvoyé **identique**, page **avec** des mentions | `on_same_cursor_with_records` | Mentions gardées, puis **fin**, avec un avertissement au journal | `error` |
+| Page **vide**, curseur différent ou absent | `on_empty_page` | **Fin**, avec un avertissement au journal | `error` |
+| Mentions reçues **sans** curseur suivant | — | **Erreur** (`PaginationError`), jamais une fin | — |
+| `status` ≠ `success`, `result` / `docs` absents ou mal formés | — | **Erreur** (`ApiSchemaError`), sans nouvel essai | — |
+| HTTP 5xx, délai dépassé, coupure réseau, JSON tronqué | — | Jusqu'à **5 essais** (délais 2 s, 4 s, 8 s, 16 s + hasard), puis erreur | `RetryPolicy` |
+| HTTP 429 | — | Attente de `Retry-After` (5 min maximum, sinon abandon), sinon même délai que ci-dessus | `RetryPolicy` |
+| HTTP 401 / 403 | — | **Arrêt immédiat**, sans nouvel essai | — |
+| Plus de pages que `ceil(nbDocs / rows) × 1,2 + 10` | `page_margin_factor`, `page_margin_extra` | **Erreur** (protection contre une boucle) | |
 
-Quelle que soit la façon dont la boucle s'arrête, **COMPLETED n'est attribué qu'après validation** : nombre d'IDs uniques = `nbDocs`. Sinon, le statut est INCOMPLETE (règle n°5).
+Quelle que soit la façon dont la pagination s'arrête, **COMPLETED n'est attribué qu'après validation** : nombre de
+mentions uniques = `nbDocs`, sinon INCOMPLETE (règle n°5).
 
 ## 6. Points à faire confirmer
 Voir `questions_fournisseur.md` : points 5, 6, 7, 10, 11, 12, 13 et écarts A, B, C.

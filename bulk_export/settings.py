@@ -97,3 +97,41 @@ def load_settings(source: Mapping[str, Any] | None = None, *, use_streamlit: boo
         pass
     register_secret(settings.supabase_service_key)
     return settings
+
+
+# ─── Accès à l'API Ratings & Reviews ──────────────────────────────────────────
+
+@dataclass(frozen=True)
+class ApiCredentials:
+    token: str = field(repr=False)
+    base_url: str = "https://api-pf.ratingsandreviews-beauty.com"
+
+
+def _api_token_from_streamlit() -> str | None:
+    try:
+        import streamlit as st
+        return str(st.secrets["api"]["token"]) or None  # même section que l'application actuelle
+    except Exception:
+        return None
+
+
+def load_api_credentials(source: Mapping[str, Any] | None = None, *,
+                         use_streamlit: bool = True) -> ApiCredentials:
+    """Token de l'API : secrets Streamlit ``[api] token`` (comme l'application actuelle),
+    sinon variable d'environnement ``BULK_EXPORT_API_TOKEN``. Jamais affiché."""
+    if source is not None:
+        token = source.get("token")
+        base_url = source.get("base_url")
+    else:
+        token = (_api_token_from_streamlit() if use_streamlit else None) or os.environ.get("BULK_EXPORT_API_TOKEN")
+        base_url = os.environ.get("BULK_EXPORT_API_BASE_URL")
+    if not token:
+        raise SettingsError("Paramètre manquant : token de l'API (secrets Streamlit [api] token "
+                            "ou variable d'environnement BULK_EXPORT_API_TOKEN).")
+    register_secret(str(token))
+    creds = ApiCredentials(token=str(token))
+    if base_url:
+        if not str(base_url).startswith("https://"):
+            raise SettingsError("Paramètre invalide : base_url (https:// obligatoire).")
+        creds = ApiCredentials(token=str(token), base_url=str(base_url).rstrip("/"))
+    return creds

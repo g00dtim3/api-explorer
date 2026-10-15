@@ -50,8 +50,10 @@ storage_bucket = "bulk-exports"   # bucket PRIVÉ
 retention_days = 30
 ```
 
+Le token de l'API n'a pas besoin d'être recopié : Bulk Export V2 lit le même `[api] token` que le reste de l'application.
+
 Pour la ligne de commande (plus tard), les mêmes valeurs peuvent être données par les variables d'environnement
-`BULK_EXPORT_DATABASE_URL`, `BULK_EXPORT_DB_SCHEMA`, `BULK_EXPORT_SUPABASE_URL`, `BULK_EXPORT_SUPABASE_SERVICE_KEY`,
+`BULK_EXPORT_API_TOKEN`, `BULK_EXPORT_DATABASE_URL`, `BULK_EXPORT_DB_SCHEMA`, `BULK_EXPORT_SUPABASE_URL`, `BULK_EXPORT_SUPABASE_SERVICE_KEY`,
 `BULK_EXPORT_STORAGE_BUCKET` et `BULK_EXPORT_RETENTION_DAYS`.
 
 ## 2. Lancer les tests (pour un développeur)

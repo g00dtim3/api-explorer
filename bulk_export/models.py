@@ -145,6 +145,8 @@ class ExportConfig:
     # Réglages des empreintes (decision_identifiant.md) : figés avec l'export
     # pour que les empreintes restent recalculables à l'identique.
     fingerprint: Mapping[str, Any] = field(default_factory=dict)
+    # Règle de fin de pagination (api_adapter.DEFAULT_PAGINATION) : figée pour la traçabilité.
+    pagination: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -171,10 +173,20 @@ class ExportConfig:
                 raise ConfigError(f"Le filtre « {key} » doit être un texte non vide.")
             clean[key] = value
         _reject_secret_keys(dict(self.fingerprint), "fingerprint.")
+        _reject_secret_keys(dict(self.pagination), "pagination.")
+        # Import tardif : vérifie les réglages sans créer de dépendance circulaire.
+        from bulk_export.api_adapter import merged_pagination
+        from bulk_export.fingerprints import merged_settings
+        try:
+            merged_settings(self.fingerprint)
+            merged_pagination(self.pagination)
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from None
 
         # Rendre les dictionnaires non modifiables après création.
         object.__setattr__(self, "filters", MappingProxyType(dict(sorted(clean.items()))))
         object.__setattr__(self, "fingerprint", MappingProxyType(dict(self.fingerprint)))
+        object.__setattr__(self, "pagination", MappingProxyType(dict(self.pagination)))
         object.__setattr__(self, "output_formats", tuple(sorted(set(formats))))
 
     # — Sérialisation —
@@ -188,6 +200,7 @@ class ExportConfig:
             "rows": self.rows,
             "random": self.random,
             "fingerprint": dict(self.fingerprint),
+            "pagination": dict(self.pagination),
         }
 
     def to_json(self) -> str:
@@ -204,7 +217,7 @@ class ExportConfig:
         if not isinstance(data, Mapping):
             raise ConfigError("La configuration doit être un objet JSON.")
         _reject_secret_keys(data)
-        known = {"name", "filters", "output_formats", "batch_size", "rows", "random", "fingerprint"}
+        known = {"name", "filters", "output_formats", "batch_size", "rows", "random", "fingerprint", "pagination"}
         unknown = set(data) - known
         if unknown:
             raise ConfigError(f"Champs inconnus dans la configuration : {sorted(unknown)}.")
