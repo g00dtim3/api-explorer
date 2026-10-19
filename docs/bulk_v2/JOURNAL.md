@@ -491,3 +491,18 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
 - [ ] T1 à T6 et T9 à la main.
 - [ ] T7 : sans objet (aucune sous-page).
 - [ ] T8 : commande dans LISEZMOI §0.
+
+---
+
+## Correctif du 19/10/2026 — plantage des modules 2 et 3 (« legacy ») avec pandas 3
+
+- **Symptôme** (Streamlit Cloud, Python 3.14) : `AttributeError` dans `module3_bulk_export.py` ligne 597, à l'affichage
+  des résultats : `DataFrame.applymap` n'existe plus dans pandas 3. Le module 2 a le même problème (lignes 412 et 441).
+- **Cause** : risque relevé dès l'audit du sprint 0 (`audit_code.md`, point 8). `requirements.txt` demandait seulement
+  `pandas>=2.0.0`, et Streamlit Cloud a installé pandas 3 lors d'un redéploiement.
+- **Correction** : `pandas>=2.0.0,<3` dans `requirements.txt`. Les modules 2 et 3 ne sont **pas** modifiés (règle n°1).
+  pandas 2.3.3 existe pour Python 3.14 (vérifié).
+- **Test ajouté** : `tests/test_legacy_pandas.py` fait afficher des résultats par les modules 2 et 3. Il échouait avec
+  pandas 3.0.5 (bug reproduit) et passe avec pandas 2.3.3. `pytest` : **273 réussis**.
+- Point ouvert : pandas avertit que `applymap` est obsolète. Pour passer un jour à pandas 3, il faudra remplacer
+  `applymap` par `map` dans les modules 2 et 3, avec l'accord explicite de l'utilisateur pour le module 3.
