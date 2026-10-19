@@ -48,6 +48,14 @@ def manifest_path(export_id: str) -> str:
     return f"{export_id}/output/manifest.json"
 
 
+def xlsx_path(export_id: str) -> str:
+    return f"{export_id}/output/export_complete.xlsx"
+
+
+def plat_path(export_id: str) -> str:
+    return f"{export_id}/output/export_plat.csv"
+
+
 def zip_path(export_id: str) -> str:
     return f"{export_id}/output/export_batches.zip"
 
@@ -187,6 +195,7 @@ class BuiltOutputs:
     batches: list[tuple[Path, Any]]
     csv_file: Path | None
     csv_header: list[str]
+    derived: dict = field(default_factory=dict)  # notes sur les formats dérivés (Excel : cellules coupées…)
 
 
 def build_and_upload_data_files(conn, export_id: str, config: ExportConfig, storage: Storage,
@@ -206,7 +215,46 @@ def build_and_upload_data_files(conn, export_id: str, config: ExportConfig, stor
         remote = csv_path(export_id)
         size = storage.upload_file(csv_file, remote, "text/csv; charset=utf-8")
         records.append(ss.FileRecord(remote, "csv_complete", rows, sha256_file(csv_file), size))
-    return BuiltOutputs(records, batches, csv_file, header)
+    notes = _build_derived(conn, export_id, config, storage, workdir, records, header)
+    return BuiltOutputs(records, batches, csv_file, header, notes)
+
+
+def _build_derived(conn, export_id: str, config: ExportConfig, storage: Storage, workdir: Path,
+                   records: list[ss.FileRecord], header: list[str]) -> dict:
+    """Formats dérivés demandés : Excel (mêmes colonnes que le CSV complet) et fichier plat."""
+    from bulk_export import derived
+
+    notes: dict = {}
+
+    def mentions():
+        return ss.iter_mentions(conn, export_id)
+
+    if "xlsx" in config.output_formats:
+        if not header:  # CSV non demandé : mêmes colonnes calculées sans écrire le CSV
+            header = list(dict.fromkeys(k for _, _, raw in mentions() for k in json.loads(raw)))
+        total = sum(f.rows_count or 0 for f in records if f.kind == "batch_jsonl")
+        dest = workdir / "export_complete.xlsx"
+        try:
+            stats = derived.write_excel(mentions, dest, header, total)
+        except derived.ExcelTooLarge as exc:
+            notes["xlsx"] = {"produced": False, "reason": str(exc)}
+        else:
+            remote = xlsx_path(export_id)
+            size = storage.upload_file(
+                dest, remote, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            records.append(ss.FileRecord(remote, "xlsx", stats.rows, sha256_file(dest), size))
+            notes["xlsx"] = {"produced": True, **stats.as_dict()}
+            os.remove(dest)
+    if "plat" in config.output_formats:
+        dest = workdir / "export_plat.csv"
+        rows = derived.write_plat(mentions, dest)
+        remote = plat_path(export_id)
+        size = storage.upload_file(dest, remote, "text/csv; charset=utf-8")
+        records.append(ss.FileRecord(remote, "csv_plat", rows, sha256_file(dest), size))
+        notes["plat"] = {"produced": True, "rows": rows, "separator": ";",
+                         "source": "utils.postprocess_reviews (format plat existant, format dérivé)"}
+        os.remove(dest)
+    return notes
 
 
 def upload_manifest_and_zip(export_id: str, config: ExportConfig, storage: Storage, workdir: Path,

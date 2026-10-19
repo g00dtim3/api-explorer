@@ -506,3 +506,38 @@ Résultat : **mêmes 60 mentions, même ordre, zéro doublon** qu'un export sans
   pandas 3.0.5 (bug reproduit) et passe avec pandas 2.3.3. `pytest` : **273 réussis**.
 - Point ouvert : pandas avertit que `applymap` est obsolète. Pour passer un jour à pandas 3, il faudra remplacer
   `applymap` par `map` dans les modules 2 et 3, avec l'accord explicite de l'utilisateur pour le module 3.
+
+---
+
+## Formats Excel et « plat » (19/10/2026)
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/derived.py` (nouveau) | Excel en flux (openpyxl, écriture seule) ; fichier plat par paquets de 5 000 avec `utils.postprocess_reviews` **réutilisée telle quelle** |
+| `bulk_export/downloads.py` | Fabrication et envoi des deux fichiers pendant la validation (`export_complete.xlsx`, `export_plat.csv`) |
+| `bulk_export/validation.py` | Intégrité (empreinte relue dans Storage) et cohérence (lignes = uniques) des deux fichiers |
+| `bulk_export/models.py` | Deux nouveaux formats, `xlsx` et `plat`, **cochés par défaut** |
+| `bulk_export/finalize.py` | Notes sur les formats dérivés dans la validation et le manifeste (`derived_formats`) |
+| `module4_bulk_export_v2.py` | Cases à cocher dans New Export, liens dans Downloads |
+| `tests/` | +13 tests (`test_derived.py`, validation de bout en bout, altération des fichiers) |
+
+### Décisions (validées)
+- **Excel** = mêmes colonnes et mêmes valeurs que le CSV complet (listes en texte JSON, nombres en nombres). Dans
+  l'Excel **seulement** : une cellule de plus de 32 767 caractères est coupée, et les caractères de contrôle
+  interdits sont retirés. Les deux sont comptés dans le manifeste. Un texte qui commence par « = » reste du texte
+  (jamais une formule). Au-delà de 1 048 575 mentions, l'Excel n'est pas produit, et la raison est notée.
+- **Fichier plat** = **identique au caractère près** au format plat existant (modules 2 et 3), y compris `Sampling` avec
+  une majuscule et la date au 1er du mois. Traité par paquets avec les colonnes et les types du fichier entier (ex. une
+  note entière devient 5.0 partout dès qu'une note manque, comme avec pandas). Tests : identique pour des paquets de
+  1, 2, 3 et 1 000 mentions. Séparateur `;`, UTF-8 avec BOM.
+- Ni l'un ni l'autre n'est ajouté au ZIP. Les lots JSONL restent la référence brute ; Excel et plat sont des formats
+  dérivés (règle n°3).
+- Les exports validés **avant** ce changement n'ont pas ces fichiers. Il faut les relancer.
+- `utils.py` et les modules 1 à 3 ne sont pas modifiés.
+
+### Mesures (20 000 fausses mentions, machine de développement)
+Fichier plat : 2,3 s · Excel : 2,8 s (≈ 1 Mo). Pour 500 000 mentions, compter 1 à 2 min chacun ici, et
+probablement 2 à 4 min sur Streamlit Cloud (à mesurer au sprint 7).
+
+`pytest` : **284 réussis**.

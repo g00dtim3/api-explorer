@@ -101,7 +101,7 @@ def test_filtre_technique_ou_inconnu_refuse(cle):
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"batch_size": 12_345}, {"rows": 0}, {"rows": 1_001}, {"output_formats": ("xlsx",)},
+    {"batch_size": 12_345}, {"rows": 0}, {"rows": 1_001}, {"output_formats": ("pdf",)},
     {"output_formats": ()}, {"name": "  "},
 ])
 def test_valeurs_invalides_refusees(kwargs):

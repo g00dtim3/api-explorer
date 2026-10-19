@@ -24,7 +24,7 @@ from bulk_export.models import ExportStatus as S
 from bulk_export.storage import Storage, StorageError
 
 logger = get_logger(__name__)
-FINAL_KINDS = ("batch_jsonl", "csv_complete", "manifest", "zip")
+FINAL_KINDS = ("batch_jsonl", "csv_complete", "xlsx", "csv_plat", "manifest", "zip")
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,7 @@ def finalize(conn, export_id: str, storage: Storage, adapter: PaginationAdapter,
             "validated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "expected_at_end": expected_now, "checks": validation.checks_to_json(checks),
             "stats": {"mentions": row["unique_count"], "content_bytes": content_bytes},
+            "derived_formats": built.derived,
         }
         manifest = downloads.build_manifest(row, config, built.files, ss.list_duplicates(conn, export_id),
                                             ss.count_conflicts(conn, export_id, "collision"), result, final)

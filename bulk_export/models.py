@@ -103,7 +103,8 @@ API_FILTER_KEYS = frozenset({
 ALLOWED_BATCH_SIZES = (10_000, 25_000, 50_000)
 DEFAULT_BATCH_SIZE = 25_000
 ROWS_MAX = 1_000  # documenté par le fournisseur (audit_api.md, point 1)
-ALLOWED_OUTPUT_FORMATS = frozenset({"csv", "jsonl", "zip"})
+# xlsx et plat : formats dérivés (Excel, et format « plat » de utils.postprocess_reviews).
+ALLOWED_OUTPUT_FORMATS = frozenset({"csv", "jsonl", "zip", "xlsx", "plat"})
 
 # Tout nom de champ contenant l'un de ces mots est refusé dans une configuration.
 _SECRET_WORDS = ("token", "password", "passwd", "secret", "apikey", "api_key",
@@ -140,7 +141,7 @@ class ExportConfig:
     """
     name: str
     filters: Mapping[str, str]
-    output_formats: tuple[str, ...] = ("csv", "jsonl", "zip")
+    output_formats: tuple[str, ...] = ("csv", "jsonl", "zip", "xlsx", "plat")
     batch_size: int = DEFAULT_BATCH_SIZE
     rows: int = ROWS_MAX
     random: bool = False

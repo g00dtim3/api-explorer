@@ -149,6 +149,18 @@ def check_csv(conn, export_id: str, storage: Storage, f: ss.FileRecord, local_cs
     return checks
 
 
+def _integrity(storage: Storage, f: ss.FileRecord, name: str) -> Check:
+    digest = hashlib.sha256()
+    try:
+        for block in storage.iter_bytes(f.path):
+            digest.update(block)
+    except StorageError as exc:
+        return Check(name, False, f"Illisible : {exc}", FAILED)
+    ok = digest.hexdigest() == f.sha256
+    return Check(name, ok, "Empreinte relue identique." if ok else "Empreinte relue différente de celle enregistrée.",
+                 FAILED)
+
+
 def run_checks(conn, row: dict[str, Any], config: ExportConfig, storage: Storage, files: list[ss.FileRecord],
                *, expected_now: int | None, metrics_error: str | None, local_csv: Path | None) -> tuple[list[Check], str]:
     export_id = row["export_id"]
@@ -190,6 +202,12 @@ def run_checks(conn, row: dict[str, Any], config: ExportConfig, storage: Storage
             checks += check_csv(conn, export_id, storage, f, local_csv)
             checks.append(Check("Cohérence du CSV", f.rows_count == unique,
                                 f"Lignes du CSV {f.rows_count} · uniques {unique}.", FAILED))
+    for f in files:
+        if f.kind in ("xlsx", "csv_plat"):
+            label = "Excel" if f.kind == "xlsx" else "fichier plat"
+            checks.append(_integrity(storage, f, f"Intégrité de l'{label}" if f.kind == "xlsx" else f"Intégrité du {label}"))
+            checks.append(Check(f"Cohérence de l'{label}" if f.kind == "xlsx" else f"Cohérence du {label}",
+                                f.rows_count == unique, f"Lignes {f.rows_count} · uniques {unique}.", FAILED))
     checks.append(Check("Avis jumeaux", None,
                         f"{collisions} collision(s) : tous les avis gardés, signalés (non bloquant).", None))
 

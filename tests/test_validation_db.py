@@ -64,7 +64,18 @@ def test_export_coherent_completed_fichiers_et_purge(pg_conn, connect, tmp_path)
     row = ss.get_export(pg_conn, export_id)
     assert result.passed and row["status"] == "COMPLETED" and row["validation_json"]["passed"] is True
     kinds = sorted(f["kind"] for f in ss.list_files(pg_conn, export_id))
-    assert kinds == ["batch_jsonl", "csv_complete", "manifest", "zip"]
+    assert kinds == ["batch_jsonl", "csv_complete", "csv_plat", "manifest", "xlsx", "zip"]
+    # Formats dérivés : Excel lisible avec une ligne par mention ; fichier plat identique au code existant.
+    from openpyxl import load_workbook
+
+    from tests.test_derived import legacy_flat
+    rows = list(load_workbook(store.root / f"{export_id}/output/export_complete.xlsx", read_only=True)["Data"].iter_rows())
+    assert len(rows) == 9
+    plat = (store.root / f"{export_id}/output/export_plat.csv").read_text(encoding="utf-8-sig")
+    assert plat == legacy_flat([d for p in pages for d in p])
+    names = {c["name"] for c in row["validation_json"]["checks"]}
+    assert {"Intégrité de l'Excel", "Cohérence du fichier plat"} <= names
+    assert row["validation_json"]["derived_formats"]["xlsx"]["truncated_cells"] == 0
     # Les fichiers relus redonnent exactement les mentions reçues.
     batch = store.root / f"{export_id}/batches/batch_0001.jsonl.gz"
     lines = gzip.open(batch, "rb").read().decode().splitlines()
@@ -236,3 +247,38 @@ def test_runner_collecte_puis_validation_automatique(pg_conn, connect, tmp_path)
     assert row["status"] == "COMPLETED" and row["lease_owner"] is None
     # Bouton « Valider » refusé : il n'y a plus rien à valider.
     assert not runner.validate(export_id).ok
+
+
+class TamperDerived(LocalStorage):
+    """Altère l'Excel ou le fichier plat juste après leur envoi."""
+
+    def __init__(self, root, suffix):
+        super().__init__(root)
+        self.suffix = suffix
+
+    def upload_file(self, local_path, remote_path, content_type):
+        size = super().upload_file(local_path, remote_path, content_type)
+        if remote_path.endswith(self.suffix):
+            with open(self._path(remote_path), "ab") as fh:
+                fh.write(b"x")
+        return size
+
+
+@pytest.mark.parametrize("suffix,check_name", [("export_complete.xlsx", "Intégrité de l'Excel"),
+                                               ("export_plat.csv", "Intégrité du fichier plat")])
+def test_format_derive_altere_failed(pg_conn, connect, tmp_path, suffix, check_name):
+    pages = fake_pages(total=5)
+    export_id = collect(pg_conn, connect, pages)
+    run_finalize(pg_conn, export_id, TamperDerived(tmp_path / "s", suffix), FakePagedServer(pages))
+    row = ss.get_export(pg_conn, export_id)
+    assert row["status"] == "FAILED" and check(row, check_name)["ok"] is False
+
+
+def test_formats_derives_non_demandes(pg_conn, connect, tmp_path):
+    config = ExportConfig(name="fake sans dérivés", filters={"brand": "FAKE_BRAND"}, rows=3,
+                          output_formats=("csv", "jsonl", "zip"))
+    pages = fake_pages(total=5)
+    export_id = collect(pg_conn, connect, pages, config=config)
+    run_finalize(pg_conn, export_id, LocalStorage(tmp_path / "s"), FakePagedServer(pages))
+    kinds = {f["kind"] for f in ss.list_files(pg_conn, export_id)}
+    assert ss.get_export(pg_conn, export_id)["status"] == "COMPLETED" and not kinds & {"xlsx", "csv_plat"}

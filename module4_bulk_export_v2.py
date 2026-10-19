@@ -132,9 +132,11 @@ def _new_export_tab(conn, runner, runner_error: str | None) -> None:
 
     c1, c2, c3 = st.columns(3)
     mode = c1.radio("Mode d'export", ["Complet", "Aperçu (100 mentions)"], key="bv2_mode")
-    formats = c2.multiselect("Formats de sortie", ["csv", "jsonl", "zip"],
-                             default=list(imported_options.get("output_formats", ["csv", "jsonl", "zip"])),
-                             format_func={"csv": "CSV UTF-8", "jsonl": "JSONL", "zip": "Archive ZIP"}.get,
+    all_formats = ["csv", "jsonl", "zip", "xlsx", "plat"]
+    formats = c2.multiselect("Formats de sortie", all_formats,
+                             default=list(imported_options.get("output_formats", all_formats)),
+                             format_func={"csv": "CSV UTF-8", "jsonl": "JSONL", "zip": "Archive ZIP", "xlsx": "Excel",
+                                          "plat": "Fichier plat (;)"}.get,
                              key="bv2_formats")
     default_batch = imported_options.get("batch_size", DEFAULT_BATCH_SIZE)
     batch_size = c3.radio("Taille des lots enregistrés", ALLOWED_BATCH_SIZES,
@@ -359,7 +361,8 @@ def _events(conn, export_id: str) -> None:
 
 # ─── Onglets Downloads et History ─────────────────────────────────────────────
 
-_FILE_LABELS = {"csv_complete": "CSV complet", "zip": "Archive ZIP (lots + manifeste)", "manifest": "Manifeste (JSON)",
+_FILE_LABELS = {"csv_complete": "CSV complet", "xlsx": "Excel", "csv_plat": "Fichier plat (;)",
+                "zip": "Archive ZIP (lots + manifeste)", "manifest": "Manifeste (JSON)",
                 "csv_partial": "CSV — DONNÉES PARTIELLES"}
 
 
@@ -388,7 +391,7 @@ def _downloads_tab(conn) -> None:
     files = ss.list_files(conn, export_id)
     st.caption("Liens signés valables 1 heure. Le téléchargement se fait directement depuis Supabase Storage "
                "(aucun appel à l'API Ratings & Reviews, aucun chargement dans l'application).")
-    for kind in ("csv_complete", "zip", "manifest"):
+    for kind in ("csv_complete", "xlsx", "csv_plat", "zip", "manifest"):
         for f in files:
             if f["kind"] == kind:
                 _link(storage, f)
