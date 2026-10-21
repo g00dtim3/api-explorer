@@ -104,3 +104,17 @@ def test_orphelin_et_choix_export():
     assert u.choose_export(exports, active="b", preferred="a") == "a"
     assert u.choose_export(exports, active=None, preferred="zz") == "a"
     assert u.choose_export([], None, None) is None
+
+
+# ─── Conservation du brut (lot 1A) ────────────────────────────────────────────
+
+def test_colonne_brut_en_base():
+    assert u.raw_status({"raw_purged_at": None}) == "conservé"
+    assert u.raw_status({"raw_purged_at": dt.datetime(2026, 10, 12, 8, 0)}) == "effacé le 2026-10-12"
+
+
+def test_avertissement_taille_de_la_base():
+    assert u.size_warning(None, 6) is None
+    assert u.size_warning(5 * u.GO, 6) is None
+    message = u.size_warning(int(6.5 * u.GO), 6)
+    assert "6.5 Go" in message and "seuil d'alerte de 6 Go" in message

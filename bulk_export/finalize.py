@@ -2,7 +2,9 @@
 bulk_export/finalize.py
 ──────────────────────────────────────────────────────────────
 Après la collecte : VALIDATING → fichiers fabriqués et envoyés → contrôles → COMPLETED / INCOMPLETE / FAILED.
-Puis rétention : mentions effacées de la base après COMPLETED ; fichiers expirés supprimés de Storage.
+Puis rétention (lot 1A) : par défaut, le brut reste en base et les fichiers restent dans Storage.
+Les mentions ne sont effacées après COMPLETED que si ``purge_raw_after_validation`` est vrai ; les fichiers
+ne sont supprimés que si ``retention_days`` > 0 et dépassé.
 
 La validation est reprenable : si l'application redémarre pendant VALIDATING, l'export revient à INCOMPLETE
 (détection des orphelins) et la validation se relance ; les fichiers sont simplement refabriqués.
@@ -36,8 +38,9 @@ class FinalizeResult:
 
 
 def finalize(conn, export_id: str, storage: Storage, adapter: PaginationAdapter, *,
-             workdir_root: str | None = None, check_lease=None) -> FinalizeResult:
-    """Valide un export dont la collecte est terminée. ``check_lease()`` → False si le bail est perdu."""
+             workdir_root: str | None = None, check_lease=None, purge_raw: bool = False) -> FinalizeResult:
+    """Valide un export dont la collecte est terminée. ``check_lease()`` → False si le bail est perdu.
+    ``purge_raw`` : effacer les mentions de la base après COMPLETED (faux par défaut : brut conservé)."""
     row = ss.get_export(conn, export_id)
     if not row["pagination_finished"] or row["status"] not in (S.INCOMPLETE.value, S.FAILED.value):
         return FinalizeResult(export_id, row["status"], False, "Rien à valider (collecte non terminée ou déjà validé).")
@@ -79,7 +82,10 @@ def finalize(conn, export_id: str, storage: Storage, adapter: PaginationAdapter,
         failed = [c.name for c in checks if c.ok is False]
         if final == S.COMPLETED.value:
             ss.add_event(conn, export_id, "INFO", "Validation réussie : export COMPLETED.")
-            ss.purge_raw_mentions(conn, export_id)
+            if purge_raw:
+                ss.purge_raw_mentions(conn, export_id)
+            else:
+                ss.add_event(conn, export_id, "INFO", "Mentions conservées en base (purge désactivée).")
         else:
             ss.add_event(conn, export_id, "ERROR" if final == "FAILED" else "WARNING",
                          f"Validation : {final}. Contrôles en échec : {', '.join(failed)}.")
@@ -114,7 +120,9 @@ def _verify_uploaded(storage: Storage, records: list[ss.FileRecord]) -> None:
 
 def apply_retention(conn, storage: Storage, retention_days: int) -> list[str]:
     """Exports COMPLETED dont les fichiers ont dépassé la durée de conservation : fichiers supprimés de
-    Storage, fiche gardée dans l'historique (« fichiers expirés »)."""
+    Storage, fiche gardée dans l'historique (« fichiers expirés »). ``retention_days`` = 0 : rien n'est supprimé."""
+    if retention_days <= 0:
+        return []
     expired = []
     for export_id in ss.exports_with_expired_files(conn, retention_days):
         paths = [f["path"] for f in ss.list_files(conn, export_id)]

@@ -521,7 +521,9 @@ def list_files(conn: psycopg.Connection, export_id: str) -> list[dict[str, Any]]
 
 
 def purge_raw_mentions(conn: psycopg.Connection, export_id: str) -> int:
-    """Après COMPLETED seulement : les fichiers validés dans Storage font référence."""
+    """Après COMPLETED seulement : les fichiers validés dans Storage font référence.
+    Appelée par la validation uniquement si ``purge_raw_after_validation`` est vrai (lot 1A) ;
+    reste utilisable à la main."""
     validate_export_id(export_id)
     with conn.transaction():
         status = conn.execute("SELECT status FROM exports WHERE export_id = %s FOR UPDATE",
@@ -536,6 +538,10 @@ def purge_raw_mentions(conn: psycopg.Connection, export_id: str) -> int:
 
 
 def exports_with_expired_files(conn: psycopg.Connection, retention_days: int) -> list[str]:
+    """Exports COMPLETED dont les fichiers ont dépassé ``retention_days`` jours.
+    0 (ou moins) = conservation sans limite : aucun export (sinon « now() - 0 jour » les prendrait TOUS)."""
+    if int(retention_days) <= 0:
+        return []
     rows = conn.execute(
         """SELECT export_id FROM exports
            WHERE status = 'COMPLETED' AND files_expired_at IS NULL
@@ -543,6 +549,15 @@ def exports_with_expired_files(conn: psycopg.Connection, retention_days: int) ->
         (int(retention_days),),
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def database_sizes(conn: psycopg.Connection) -> dict[str, int | None]:
+    """Place occupée (octets) : toute la base (tous schémas, Compass compris) et la table raw_mentions
+    (données + index). Lecture seule."""
+    db_bytes, raw_bytes = conn.execute(
+        "SELECT pg_database_size(current_database()), pg_total_relation_size(to_regclass('raw_mentions'))"
+    ).fetchone()
+    return {"database": db_bytes, "raw_mentions": raw_bytes}
 
 
 def mark_files_expired(conn: psycopg.Connection, export_id: str) -> None:

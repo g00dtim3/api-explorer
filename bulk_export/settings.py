@@ -30,6 +30,8 @@ _ENV_NAMES = {
     "storage_bucket": "BULK_EXPORT_STORAGE_BUCKET",
     "retention_days": "BULK_EXPORT_RETENTION_DAYS",
     "auto_resume": "BULK_EXPORT_AUTO_RESUME",
+    "purge_raw_after_validation": "BULK_EXPORT_PURGE_RAW",
+    "alerte_taille_base_go": "BULK_EXPORT_ALERTE_TAILLE_BASE_GO",
 }
 
 
@@ -56,9 +58,14 @@ class Settings:
     supabase_url: str | None = None
     supabase_service_key: str | None = field(default=None, repr=False)
     storage_bucket: str = "bulk-exports"
-    retention_days: int = 30
+    # Durée de conservation des fichiers dans Storage, en jours. 0 = ne jamais les supprimer (défaut, lot 1A).
+    retention_days: int = 0
     # Relancer automatiquement un export interrompu par un redémarrage (désactivé par défaut).
     auto_resume: bool = False
+    # Effacer les mentions brutes de la base après COMPLETED (désactivé par défaut : le brut est conservé).
+    purge_raw_after_validation: bool = False
+    # Taille de la base (en Go) au-delà de laquelle l'onglet Export History affiche un avertissement.
+    alerte_taille_base_go: float = 6.0
 
 
 def _from_streamlit() -> Mapping[str, Any] | None:
@@ -91,9 +98,19 @@ def load_settings(source: Mapping[str, Any] | None = None, *, use_streamlit: boo
         raise SettingsError("Paramètre invalide : db_schema (lettres minuscules, chiffres et _ uniquement).")
 
     try:
-        retention = int(raw.get("retention_days", 30))
+        retention = int(raw.get("retention_days", 0))
     except (TypeError, ValueError):
         raise SettingsError("Paramètre invalide : retention_days (nombre de jours attendu).") from None
+    if retention < 0:
+        raise SettingsError("Paramètre invalide : retention_days (0 = ne jamais supprimer les fichiers, "
+                            "sinon un nombre de jours positif).")
+
+    try:
+        size_alert = float(raw.get("alerte_taille_base_go", 6))
+    except (TypeError, ValueError):
+        raise SettingsError("Paramètre invalide : alerte_taille_base_go (nombre de Go attendu).") from None
+    if not size_alert > 0:
+        raise SettingsError("Paramètre invalide : alerte_taille_base_go (nombre de Go positif attendu).")
 
     settings = Settings(
         database_url=str(raw["database_url"]),
@@ -103,6 +120,9 @@ def load_settings(source: Mapping[str, Any] | None = None, *, use_streamlit: boo
         storage_bucket=str(raw.get("storage_bucket") or "bulk-exports"),
         retention_days=retention,
         auto_resume=_as_bool(raw.get("auto_resume", False), "auto_resume"),
+        purge_raw_after_validation=_as_bool(raw.get("purge_raw_after_validation", False),
+                                            "purge_raw_after_validation"),
+        alerte_taille_base_go=size_alert,
     )
     # Dès qu'un secret est connu, il est masqué dans tous les messages.
     register_secret(settings.database_url)

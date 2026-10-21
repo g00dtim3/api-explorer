@@ -46,8 +46,8 @@ def collect(pg_conn, connect, pages, config=fake_config, nb_docs=None):
     return export_id
 
 
-def run_finalize(pg_conn, export_id, storage, server):
-    return finalize.finalize(pg_conn, export_id, storage, adapter_for(server))
+def run_finalize(pg_conn, export_id, storage, server, purge_raw=False):
+    return finalize.finalize(pg_conn, export_id, storage, adapter_for(server), purge_raw=purge_raw)
 
 
 def check(row, name):
@@ -60,7 +60,7 @@ def test_export_coherent_completed_fichiers_et_purge(pg_conn, connect, tmp_path)
     pages = fake_pages(total=8)
     export_id = collect(pg_conn, connect, pages)
     store = LocalStorage(tmp_path / "store")
-    result = run_finalize(pg_conn, export_id, store, FakePagedServer(pages))
+    result = run_finalize(pg_conn, export_id, store, FakePagedServer(pages), purge_raw=True)
     row = ss.get_export(pg_conn, export_id)
     assert result.passed and row["status"] == "COMPLETED" and row["validation_json"]["passed"] is True
     kinds = sorted(f["kind"] for f in ss.list_files(pg_conn, export_id))
@@ -85,7 +85,7 @@ def test_export_coherent_completed_fichiers_et_purge(pg_conn, connect, tmp_path)
     assert FAKE_TOKEN not in json.dumps(manifest)
     with zipfile.ZipFile(store.root / f"{export_id}/output/export_batches.zip") as zf:
         assert {"manifest.json", "batches/batch_0001.jsonl", "export_complete.csv"} <= set(zf.namelist())
-    # Rétention : mentions effacées de la base, mesures gardées.
+    # Purge activée (purge_raw_after_validation) : mentions effacées de la base, mesures gardées.
     assert pg_conn.execute("SELECT count(*) FROM raw_mentions WHERE export_id = %s", (export_id,)).fetchone()[0] == 0
     assert row["raw_purged_at"] is not None and row["validation_json"]["stats"]["mentions"] == 8
 

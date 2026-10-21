@@ -541,3 +541,53 @@ Fichier plat : 2,3 s · Excel : 2,8 s (≈ 1 Mo). Pour 500 000 mentions, compter
 probablement 2 à 4 min sur Streamlit Cloud (à mesurer au sprint 7).
 
 `pytest` : **284 réussis**.
+
+---
+
+## Lot 1A — Conservation du brut (21/10/2026)
+
+Sprint : `docs/chantier/SPRINT_L1A_conservation_du_brut.md`. Décision : `decision_conservation_brut.md` (nouveau).
+
+### Fait
+| Fichier | Rôle |
+|---|---|
+| `bulk_export/settings.py` | `purge_raw_after_validation` (faux par défaut, `BULK_EXPORT_PURGE_RAW`) ; `retention_days` : défaut **0** = jamais, négatif refusé ; `alerte_taille_base_go` (défaut 6, `BULK_EXPORT_ALERTE_TAILLE_BASE_GO`) |
+| `bulk_export/finalize.py`, `runner.py` | La purge après COMPLETED n'a lieu que si le réglage est vrai ; sinon événement « Mentions conservées en base (purge désactivée) ». `apply_retention()` ne fait rien si `retention_days` vaut 0 |
+| `bulk_export/state_store.py` | `exports_with_expired_files(0)` → aucun export (deuxième protection) ; `database_sizes()` (taille de la base et de `raw_mentions`) |
+| `bulk_export/migrations/004_conservation.sql` (nouveau) | Index `raw_mentions_compass_id_idx` sur `raw_mentions (compass_id)`, rejouable, schéma `bulk_export` seulement |
+| `bulk_export/rehydrate.py` (nouveau) | Réhydratation depuis les lots : `python -m bulk_export.rehydrate exp_…` et `--list` |
+| `bulk_export/ui_logic.py`, `module4_bulk_export_v2.py` | Export History : tailles en haut et avertissement au-delà du seuil, colonne « Brut en base » (conservé / effacé le …), bouton **« Réhydrater le brut »** (P2, demandé par l'utilisateur) |
+| `tests/` | +21 tests : `test_conservation_db.py` (nouveau), réglages, colonne et seuil, affichage d'Export History |
+| Docs | `ADAPTATION_SUPABASE.md` (ligne Rétention, secrets), `LISEZMOI.md` (script 004, secrets), `EXECUTION.md` (commandes) |
+
+### Décisions
+- `page_no = 0` pour les lignes réhydratées (les lots ne gardent pas la page ; une vraie page commence à 1).
+- Les empreintes sont **recalculées** avec les réglages de l'export, pas recopiées. Le test le vérifie : mêmes
+  `seq`, `mention_id`, `raw_json`, `content_key`, `compass_id` et `api_id` qu'avant la purge, et les doublons tracés
+  retrouvent l'`id` API de la copie gardée.
+- La taille affichée est celle de **toute** la base (Compass compris) : c'est elle que Supabase limite à 8 Go.
+  1 Go = 1 024³ octets (même unité que le reste de la page).
+- Le bouton « Réhydrater » travaille pendant l'affichage de la page (sablier). Pour un gros export, il peut prendre
+  plusieurs minutes : la ligne de commande reste possible.
+- Le test d'origine « purge après COMPLETED » est gardé, avec la purge activée explicitement (comportement inchangé).
+
+### À faire par l'utilisateur
+1. Exécuter `bulk_export/migrations/004_conservation.sql` dans le SQL Editor de Supabase (après 001 à 003).
+2. Secrets `[bulk_export]` : `retention_days = 0` (remplace 3650) **une fois cette version déployée** — pas avant :
+   l'ancienne version supprimerait tous les fichiers avec 0. Laisser `purge_raw_after_validation` absent.
+3. Réhydrater les exports déjà purgés : Export History → choisir l'export → « Réhydrater le brut »
+   (ou `python -m bulk_export.rehydrate --list` puis `python -m bulk_export.rehydrate exp_…`).
+
+### Exports réhydratés
+Pas d'accès à la base réelle depuis l'environnement de développement : liste à compléter après le passage de
+l'utilisateur (`export_id`, nombre de mentions, date).
+
+| Export | Mentions | Réhydraté le |
+|---|---|---|
+| *(à compléter)* | | |
+
+### Points ouverts
+- Mesurer la taille réelle du brut d'un export de 500 000 mentions (estimation de la spec : ≈ 1 Go).
+- Archivage du brut ancien hors de la base : à décider quand l'avertissement de taille se déclenchera.
+
+`pytest` : **305 réussis** (284 + 21), base Postgres 16 locale comprise.

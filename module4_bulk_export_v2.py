@@ -15,7 +15,7 @@ import json
 import pandas as pd
 import streamlit as st
 
-from bulk_export import db, downloads, finalize, state_store as ss, ui_logic
+from bulk_export import db, downloads, finalize, rehydrate, state_store as ss, ui_logic
 from bulk_export.api_adapter import RatingsReviewsAdapter
 from bulk_export.api_http import ApiError, RatingsReviewsHttpClient
 from bulk_export.logging_utils import mask
@@ -402,7 +402,24 @@ def _downloads_tab(conn) -> None:
                 _link(storage, f)
 
 
+def _space_header(conn) -> None:
+    """Place occupée par la base et par le brut conservé (lot 1A), avec un avertissement au-delà du seuil."""
+    try:
+        sizes = ss.database_sizes(conn)
+        threshold = load_settings().alerte_taille_base_go
+    except Exception as exc:
+        st.caption(mask(f"Taille de la base indisponible : {exc}"))
+        return
+    c1, c2 = st.columns(2)
+    c1.metric("Taille de la base (tous schémas)", ui_logic.format_bytes(sizes["database"]))
+    c2.metric("Brut en base (raw_mentions)", ui_logic.format_bytes(sizes["raw_mentions"]))
+    warning = ui_logic.size_warning(sizes["database"], threshold)
+    if warning:
+        st.warning(warning)
+
+
 def _history_tab(conn, runner) -> None:
+    _space_header(conn)
     exports = ss.list_exports(conn, limit=200)
     if not exports:
         st.info("Aucun export pour l'instant.")
@@ -410,6 +427,7 @@ def _history_tab(conn, runner) -> None:
     table = [{"Nom": e["name"], "Statut": e["status"], "Attendues": e["expected_count"], "Uniques": e["unique_count"],
               "Doublons": e["duplicate_count"], "Rejetées": e["error_count"], "Créé le": e["created_at"],
               "Fini le": e["finished_at"],
+              "Brut en base": ui_logic.raw_status(e),
               "Fichiers": "expirés" if e["files_expired_at"] else "",
               "Filtres": json.dumps(e["config_json"].get("filters", {}), ensure_ascii=False),
               "Export ID": e["export_id"]} for e in exports]
@@ -435,6 +453,11 @@ def _history_tab(conn, runner) -> None:
     for f in ss.list_files(conn, export_id):
         if f["kind"] == "csv_partial" and storage is not None:
             _link(storage, f)
+    if status == "COMPLETED" and row["raw_purged_at"] and not row["files_expired_at"] and storage is not None:
+        if c2.button("Réhydrater le brut", key=f"bv2_hist_rehydrate_{export_id}",
+                     help="Remet les mentions brutes en base à partir des lots JSONL de Storage "
+                          "(empreintes vérifiées). Peut prendre plusieurs minutes pour un gros export."):
+            _rehydrate(conn, storage, export_id)
 
     with c3.popover("Supprimer…"):
         resumable = status in ("PENDING", "PAUSED", "FAILED", "INCOMPLETE")
@@ -458,6 +481,16 @@ def _show_result(result) -> None:
         st.success(result.message)
     else:
         st.error(result.message)
+
+
+def _rehydrate(conn, storage, export_id: str) -> None:
+    with st.spinner("Réhydratation : relecture et vérification des lots…"):
+        try:
+            count = rehydrate.rehydrate(conn, export_id, storage)
+        except (rehydrate.RehydrateError, ss.StateError) as exc:
+            st.error(mask(str(exc)))
+            return
+    st.success(f"Brut réhydraté : {count} mentions remises en base.")
 
 
 def _partial(conn, storage, export_id: str) -> None:
