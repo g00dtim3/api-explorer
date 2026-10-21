@@ -17,7 +17,10 @@ La spécification complète est dans `docs/bulk_v2/SPEC.md` (spécification fonc
 4. **Un curseur n'est jamais marqué validé avant que les données de sa page soient écrites durablement**
    (fichier écrit + `fsync`, puis transaction SQLite).
 5. **COMPLETED uniquement après validation**. Une boucle de pagination qui s'arrête ne suffit pas.
-6. **Pas d'identifiant artificiel** : une mention sans ID natif exploitable = erreur explicite.
+6. **Pas d'identifiant inventé** (compteur, UUID, numéro de ligne). Le champ `id` de l'API n'est pas fiable (régénéré
+   à chaque export) : il est conservé tel quel mais n'est **jamais** utilisé comme clé. L'unicité repose sur des empreintes
+   SHA-256 calculées uniquement à partir des champs source (`raw_hash`, `content_key`, `compass_id` ; cf.
+   `docs/bulk_v2/decision_identifiant.md`). Une mention sans date = erreur explicite. *(Règle révisée le 15/10/2026.)*
 7. **Doublon avec contenu différent** = conflit tracé et signalé, jamais fusionné silencieusement.
 8. **Secrets** : aucun token dans les logs, `config.json`, manifestes ou messages d'erreur. Masquer systématiquement.
 9. **Pas de données inventées** pour prouver un résultat. Les tests unitaires peuvent utiliser de petites
