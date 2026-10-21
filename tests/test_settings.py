@@ -44,6 +44,32 @@ def test_retention_invalide():
         load_settings({"database_url": fake_url, "retention_days": "beaucoup"})
 
 
+def test_conservation_par_defaut():
+    """Lot 1A : brut conservé en base et fichiers jamais supprimés, sauf réglage contraire."""
+    s = load_settings({"database_url": fake_url})
+    assert s.retention_days == 0 and s.purge_raw_after_validation is False and s.alerte_taille_base_go == 6
+
+
+def test_retention_negative_refusee():
+    with pytest.raises(SettingsError, match="retention_days"):
+        load_settings({"database_url": fake_url, "retention_days": -1})
+
+
+def test_purge_et_seuil_depuis_l_environnement(monkeypatch):
+    monkeypatch.setenv("BULK_EXPORT_DATABASE_URL", fake_url)
+    monkeypatch.setenv("BULK_EXPORT_PURGE_RAW", "true")
+    monkeypatch.setenv("BULK_EXPORT_ALERTE_TAILLE_BASE_GO", "7.5")
+    s = load_settings(use_streamlit=False)
+    assert s.purge_raw_after_validation is True and s.alerte_taille_base_go == 7.5
+
+
+@pytest.mark.parametrize("key,value", [("purge_raw_after_validation", "peut-être"),
+                                       ("alerte_taille_base_go", "beaucoup"), ("alerte_taille_base_go", 0)])
+def test_reglages_conservation_invalides(key, value):
+    with pytest.raises(SettingsError, match=key):
+        load_settings({"database_url": fake_url, key: value})
+
+
 # ─── Token de l'API ───────────────────────────────────────────────────────────
 
 from bulk_export.settings import load_api_credentials  # noqa: E402

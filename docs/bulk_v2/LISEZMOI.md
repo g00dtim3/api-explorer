@@ -37,6 +37,7 @@ Le script peut être relancé sans danger : il ne recrée pas ce qui existe déj
 |---|---|---|---|
 | `bulk_export/migrations/002_rejected.sql` | sprint 3 | Table `rejected_mentions` : mentions rejetées (ex. sans date), gardées telles quelles | 7 tables dans le schéma `bulk_export` |
 | `bulk_export/migrations/003_files.sql` | sprint 6 | Colonnes d'empreinte des fichiers et de rétention | Colonnes `content_sha256` (table `files`) et `raw_purged_at` (table `exports`) |
+| `bulk_export/migrations/004_conservation.sql` | lot 1A | Index sur `raw_mentions (compass_id)` : retrouver le brut d'un verbatim Compass | Index `raw_mentions_compass_id_idx` (*Database → Indexes*, schéma `bulk_export`) |
 
 ### 1.4 Ne PAS exposer le schéma dans l'API publique
 Dans *Project Settings → Data API* (ou *API*), la liste **Exposed schemas** ne doit **pas** contenir `bulk_export`.
@@ -54,15 +55,18 @@ database_url = "postgresql://postgres.<projet>:<mot-de-passe>@aws-0-eu-....poole
 supabase_url = "https://<projet>.supabase.co"
 supabase_service_key = "..."      # clé service_role : JAMAIS dans le code ni dans Git
 storage_bucket = "bulk-exports"   # bucket PRIVÉ
-retention_days = 30
+retention_days = 0              # 0 = ne jamais supprimer les fichiers de Storage (lot 1A). Jamais négatif.
 auto_resume = false             # true = relancer seul un export interrompu (cf. EXECUTION.md)
+# Facultatif (lot 1A) :
+# purge_raw_after_validation = false   # true = effacer le brut de la base après COMPLETED (ancien comportement)
+# alerte_taille_base_go = 6            # avertissement dans Export History au-delà de cette taille de base
 ```
 
 Le token de l'API n'a pas besoin d'être recopié : Bulk Export V2 lit le même `[api] token` que le reste de l'application.
 
 Pour la ligne de commande (plus tard), les mêmes valeurs peuvent être données par les variables d'environnement
 `BULK_EXPORT_API_TOKEN`, `BULK_EXPORT_DATABASE_URL`, `BULK_EXPORT_DB_SCHEMA`, `BULK_EXPORT_SUPABASE_URL`, `BULK_EXPORT_SUPABASE_SERVICE_KEY`,
-`BULK_EXPORT_STORAGE_BUCKET` et `BULK_EXPORT_RETENTION_DAYS`.
+`BULK_EXPORT_STORAGE_BUCKET`, `BULK_EXPORT_RETENTION_DAYS`, `BULK_EXPORT_PURGE_RAW` et `BULK_EXPORT_ALERTE_TAILLE_BASE_GO`.
 
 ### 1.6 Préparer Supabase Storage (sprint 6)
 1. **Storage → New bucket** : nom `bulk-exports`, **Public bucket : désactivé** (bucket privé).

@@ -58,7 +58,11 @@ python -m bulk_export.run --create ma_config.json   # crée et lance
 python -m bulk_export.run --status exp_…            # état et derniers événements
 python -m bulk_export.run --export-id exp_…         # reprendre
 python -m bulk_export.run --recover                 # exports interrompus → PAUSED
+python -m bulk_export.rehydrate --list             # exports purgés dont le brut peut être remis en base
+python -m bulk_export.rehydrate exp_…              # remet le brut en base depuis les lots (lot 1A)
 ```
+La réhydratation a aussi besoin de `BULK_EXPORT_SUPABASE_URL` et `BULK_EXPORT_SUPABASE_SERVICE_KEY` (lecture des lots dans Storage). Elle existe aussi en bouton « Réhydrater le brut » dans Export History.
+
 Ctrl+C arrête proprement, après la page en cours. Exemple de `ma_config.json` :
 ```json
 {"name": "Essai FAKE_BRAND 2024", "filters": {"brand": "FAKE_BRAND", "start-date": "2024-01-01", "end-date": "2024-01-31"}}

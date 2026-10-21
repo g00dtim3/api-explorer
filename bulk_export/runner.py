@@ -54,7 +54,7 @@ class ExportRunner:
                  adapter_factory: Callable[[ExportConfig], PaginationAdapter], *,
                  owner: str | None = None, lease_ttl_s: int = DEFAULT_LEASE_TTL_S,
                  heartbeat_s: float = DEFAULT_HEARTBEAT_S, engine_kwargs: dict[str, Any] | None = None,
-                 storage_factory: Callable[[], Any] | None = None):
+                 storage_factory: Callable[[], Any] | None = None, purge_raw_after_validation: bool = False):
         if heartbeat_s >= lease_ttl_s:
             raise ValueError("Le battement de cœur doit être plus fréquent que la durée du bail.")
         self._connect = connect
@@ -65,6 +65,8 @@ class ExportRunner:
         self._engine_kwargs = engine_kwargs or {}
         # Stockage des fichiers finaux (Supabase Storage). Sans lui, la validation ne peut pas se faire.
         self._storage_factory = storage_factory
+        # Effacer le brut de la base après COMPLETED (faux par défaut : brut conservé, lot 1A).
+        self._purge_raw = purge_raw_after_validation
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -194,7 +196,8 @@ class ExportRunner:
             try:
                 config = ss.get_config(conn, export_id)
                 result = finalize(conn, export_id, self._storage_factory(), self._adapter_factory(config),
-                                  check_lease=lambda: ss.renew_lease(conn, export_id, self.owner, self.lease_ttl_s))
+                                  check_lease=lambda: ss.renew_lease(conn, export_id, self.owner, self.lease_ttl_s),
+                                  purge_raw=self._purge_raw)
                 logger.info("Validation de %s : %s %s", export_id, result.status, result.message)
             finally:
                 ss.release_lease(conn, export_id, self.owner)
@@ -260,4 +263,5 @@ def build_runner(settings, credentials, **kwargs: Any) -> ExportRunner:
             return build_storage(settings)
 
     kwargs.setdefault("storage_factory", storage_factory)
+    kwargs.setdefault("purge_raw_after_validation", settings.purge_raw_after_validation)
     return ExportRunner(connect, adapter_factory, **kwargs)

@@ -18,7 +18,7 @@
 | §5.4 Point de reprise | `fsync` puis commit SQLite | **Commit Postgres** de la page entière (mentions + IDs + compteurs + curseur) | La durabilité est garantie par Postgres. |
 | §5.6 Worker | Processus Python supervisé, indépendant | **V1 : tâche en arrière-plan dans l'application Streamlit**, avec un « bail » (heartbeat) dans Postgres. Si l'application redémarre, l'export passe en PAUSED et se **reprend d'un clic**, sans perte. Le moteur reste lançable en ligne de commande (`python -m bulk_export.run`) pour permettre **plus tard** un worker GitHub Actions (sprint 8, optionnel). | Pas de serveur disponible. |
 | §4.5 Téléchargements | Fichier local servi par Streamlit | Fichiers dans un **bucket privé** Supabase, téléchargés via un **lien signé temporaire** | Évite de charger 500k lignes dans la mémoire de Streamlit. |
-| §4.5 Rétention | Nettoyage des dossiers locaux | Suppression des lignes `raw_mentions` une fois les fichiers finaux produits et validés ; suppression des fichiers Storage selon la durée de rétention | Maîtrise de l'espace disque (8 Go inclus). |
+| §4.5 Rétention | Nettoyage des dossiers locaux | **Depuis le lot 1A (21/10/2026)** : les lignes `raw_mentions` sont **conservées** après COMPLETED (purge seulement si `purge_raw_after_validation = true`) et les fichiers Storage ne sont **jamais** supprimés quand `retention_days = 0` (défaut). La taille de la base est surveillée dans Export History. Voir `decision_conservation_brut.md`. *(Avant : brut effacé dès COMPLETED, fichiers supprimés après 30 jours.)* | Le brut est la seule source complète (le format plat retire `content origin` et ramène la date au mois). Espace surveillé (8 Go inclus). |
 
 ## 3. Ce qui ne change pas
 Toutes les règles de `CLAUDE.md` : données source intactes, pas d'ID artificiel, conflits tracés, COMPLETED
@@ -37,7 +37,7 @@ database_url = "postgresql://...pooler.supabase.com:5432/postgres"   # "Session 
 supabase_url = "https://<projet>.supabase.co"
 supabase_service_key = "..."     # clé service_role : côté serveur uniquement
 storage_bucket = "bulk-exports"  # bucket PRIVÉ
-retention_days = 30
+retention_days = 0               # 0 = ne jamais supprimer les fichiers (lot 1A)
 ```
 - Utiliser la chaîne de connexion **Session pooler** de Supabase (la connexion directe peut nécessiter IPv6).
 - Projet Supabase en **région UE** (les verbatims peuvent contenir des données personnelles).

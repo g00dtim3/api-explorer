@@ -250,3 +250,23 @@ def choose_export(exports: Sequence[Mapping[str, Any]], active: str | None, pref
         if candidate and candidate in ids:
             return candidate
     return ids[0] if ids else None
+
+
+# ─── Conservation du brut (lot 1A) ────────────────────────────────────────────
+
+GO = 1024 ** 3  # même unité que format_bytes
+
+
+def raw_status(row: Mapping[str, Any]) -> str:
+    """Colonne « Brut en base » de l'historique."""
+    purged = row.get("raw_purged_at")
+    return f"effacé le {purged:%Y-%m-%d}" if purged else "conservé"
+
+
+def size_warning(database_bytes: int | None, threshold_go: float) -> str | None:
+    """Message d'avertissement si la base dépasse le seuil réglable ``alerte_taille_base_go``."""
+    if database_bytes is None or database_bytes < threshold_go * GO:
+        return None
+    return (f"La base occupe {format_bytes(database_bytes)}, au-delà du seuil d'alerte de {threshold_go:g} Go "
+            "(8 Go inclus dans le plan Supabase Pro). Le brut conservé grossit à chaque export : décider "
+            "d'un archivage avant d'atteindre la limite.")

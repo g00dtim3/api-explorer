@@ -210,3 +210,13 @@ def test_downloads_et_history(pg_conn, monkeypatch):
     at.run()
     assert not at.exception, at.exception
     assert paused in str(at.dataframe[0].value) and done in str(at.dataframe[0].value)
+    # Lot 1A : taille de la base, colonne « Brut en base », bouton « Réhydrater » pour un export purgé.
+    assert {m.label for m in at.metric} == {"Taille de la base (tous schémas)", "Brut en base (raw_mentions)"}
+    assert list(at.dataframe[0].value["Brut en base"]) == ["conservé", "conservé"]
+    assert not [b for b in at.button if b.label == "Réhydrater le brut"]
+    pg_conn.execute("UPDATE exports SET raw_purged_at = now() WHERE export_id = %s", (done,))
+    at.selectbox(key="bv2_hist_sel").select(done)
+    at.run()
+    assert not at.exception, at.exception
+    assert str(at.dataframe[0].value["Brut en base"].iloc[1]).startswith("effacé le ")
+    assert [b for b in at.button if b.label == "Réhydrater le brut"]
