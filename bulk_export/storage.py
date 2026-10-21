@@ -94,6 +94,11 @@ class SupabaseStorage:
                 # Constaté le 15/10/2026 : Storage refuse les nouvelles clés « sb_secret_… ».
                 hint = (" → Storage n'accepte pas cette clé. Utilisez la clé « service_role » de l'onglet "
                         "« Legacy API Keys » (elle commence par eyJ…) dans supabase_service_key.")
+            elif "required property 'authorization'" in body:
+                # Constaté le 21/10/2026 (réhydratation) : clé qui ne commence pas par eyJ → pas d'en-tête Authorization.
+                hint = (" → La clé utilisée ne commence pas par eyJ : elle n'est pas envoyée comme jeton. Mettez la "
+                        "clé « service_role » de l'onglet « Legacy API Keys » (elle commence par eyJ…) dans "
+                        "supabase_service_key (ou BULK_EXPORT_SUPABASE_SERVICE_KEY en ligne de commande).")
             raise StorageError(f"{what} : HTTP {resp.status_code} — {body}{hint}")
 
     # ─── Envoi reprenable (TUS) ──────────────────────────────────────────────

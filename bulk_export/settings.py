@@ -116,7 +116,8 @@ def load_settings(source: Mapping[str, Any] | None = None, *, use_streamlit: boo
         database_url=str(raw["database_url"]),
         db_schema=schema,
         supabase_url=raw.get("supabase_url") or None,
-        supabase_service_key=raw.get("supabase_service_key") or None,
+        # Espaces ou retour à la ligne copiés avec la clé : retirés (sinon « eyJ… » n'est pas reconnu, cf. storage.py).
+        supabase_service_key=str(raw.get("supabase_service_key") or "").strip() or None,
         storage_bucket=str(raw.get("storage_bucket") or "bulk-exports"),
         retention_days=retention,
         auto_resume=_as_bool(raw.get("auto_resume", False), "auto_resume"),
