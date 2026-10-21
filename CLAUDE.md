@@ -66,3 +66,16 @@ PENDING → RUNNING → (STOPPING → PAUSED) | FAILED | INCOMPLETE → VALIDATI
 - À la fin du sprint : mettre à jour `docs/bulk_v2/JOURNAL.md` (ce qui est fait, décisions, points ouverts),
   puis un commit par sprint sur une branche `feature/bulk-export-v2`.
 - Expliquer les choix en français simple : l'utilisateur lit le Python mais n'est pas développeur.
+
+## Mises à jour du 21/10/2026 (chantier « gardening »)
+- **Branche** : `feature/bulk-export-v2` est fusionnée dans `main`. Streamlit Cloud déploie `main`.
+  Chaque nouveau sprint part d'une nouvelle branche créée depuis `main`, puis une pull request.
+- **Architecture réelle** : Postgres Supabase (schéma `bulk_export`) + Supabase Storage, et non plus SQLite
+  local ni `BULK_EXPORT_DIR`. `docs/bulk_v2/ADAPTATION_SUPABASE.md` fait foi pour tout ce qui concerne le stockage.
+- **Conservation** (lot 1, `docs/chantier/SPRINT_L1A_conservation_du_brut.md`) : le brut reste en base après
+  COMPLETED (purge désactivée par défaut) et `retention_days = 0` signifie « ne jamais supprimer les fichiers ».
+- **Base partagée** : le même projet Supabase héberge Compass (schéma `public`) et, après le lot 2, Reddit
+  (schéma `reddit`). Ne jamais créer, modifier ou supprimer d'objet hors du schéma `bulk_export`.
+- **Lien Compass** : `compass_id` doit rester identique, au caractère près, à l'`id` calculé par
+  `compass_import/core/hasher.py` (dépôt `mvp_verbatim_import`). Toute modification de l'une des deux
+  méthodes se fait des deux côtés, avec le test commun (fixture `fake_export_plat`).
