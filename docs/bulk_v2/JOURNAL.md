@@ -591,3 +591,11 @@ l'utilisateur (`export_id`, nombre de mentions, date).
 - Archivage du brut ancien hors de la base : à décider quand l'avertissement de taille se déclenchera.
 
 `pytest` : **305 réussis** (284 + 21), base Postgres 16 locale comprise.
+
+### Premier essai de réhydratation (21/10/2026) — `exp_20261020T090611Z_eaca94e3`
+- **Refus** à la lecture du premier lot : `HTTP 400 — headers must have required property 'authorization'`.
+  Cause : la clé Storage utilisée ne commence pas par `eyJ`, donc le programme ne l'envoie pas comme jeton
+  (en-tête `Authorization`), et Storage refuse la lecture. Rien n'a été écrit en base (tout ou rien).
+- Correctifs : les espaces ou retours à la ligne copiés autour de `supabase_service_key` sont retirés ; ce refus
+  affiche maintenant un message qui explique quoi faire (clé `service_role` de « Legacy API Keys », qui commence par `eyJ…`).
+- `pytest` : **307 réussis**.

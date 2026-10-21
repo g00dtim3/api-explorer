@@ -114,6 +114,17 @@ def test_entetes_selon_le_type_de_cle(tmp_path):
     assert all(h["Authorization"] == f"Bearer {FAKE_JWT}" for _, _, h in fake.calls)
 
 
+def test_cle_sans_jeton_message_explicatif():
+    class Resp:
+        status_code, headers = 400, {}
+        content = (b'{"statusCode":"400","error":"Error","message":"headers must have required property '
+                   b'\'authorization\'","code":"InvalidRequest"}')
+
+    with pytest.raises(StorageError, match="Legacy API Keys") as info:
+        SupabaseStorage._check(Resp(), "Lecture de exp/a")
+    assert "ne commence pas par eyJ" in str(info.value)
+
+
 def test_lien_signe_et_suppression(tmp_path):
     fake = FakeSupabase()
     s = storage(fake)

@@ -44,6 +44,11 @@ def test_retention_invalide():
         load_settings({"database_url": fake_url, "retention_days": "beaucoup"})
 
 
+def test_cle_storage_sans_espaces_autour():
+    s = load_settings({"database_url": fake_url, "supabase_service_key": "  eyJFAKE.jwt.key\n"})
+    assert s.supabase_service_key == "eyJFAKE.jwt.key"
+
+
 def test_conservation_par_defaut():
     """Lot 1A : brut conservé en base et fichiers jamais supprimés, sauf réglage contraire."""
     s = load_settings({"database_url": fake_url})
