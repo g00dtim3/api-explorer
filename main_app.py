@@ -48,15 +48,15 @@ ACCUEIL = "Accueil"
 EXPLORATEUR = "Explorateur API"
 EXPORT_MANUEL = "Export manuel"
 EXPORT_SEGMENT = "Export par segment"           # module 3 (ancien « Export bulk »)
-SYNCHRO_MARCHE = "Synchro mensuelle du marché"  # module 4 (« Bulk Export V2 » dans le code et la doc)
+EXPORT_GRANDS_VOLUMES = "Export grands volumes"  # module 4 (« Bulk Export V2 » dans le code et la doc)
 JOURNAL = "Journal des exports"
 MODULES = {
     ACCUEIL: ("Explorer, exporter et suivre les avis de l'API Ratings & Reviews.", "home"),
     EXPLORATEUR: ("Filtrer, choisir les produits et estimer le volume avant un export.", "search"),
     EXPORT_MANUEL: ("Exporter les avis des produits sélectionnés, en aperçu ou en entier.", "checklist"),
     EXPORT_SEGMENT: (None, "inventory_2"),
-    SYNCHRO_MARCHE: ("Export mensuel du marché : traçable, reprenable et vérifiable, jusqu'à 500 000 mentions.",
-                     "calendar_month"),
+    EXPORT_GRANDS_VOLUMES: ("Export traçable, reprenable et vérifiable, jusqu'à 500 000 mentions "
+                            "(synchro mensuelle du marché).", "database"),
     JOURNAL: ("Historique des exports réalisés depuis cette application.", "history"),
 }
 
@@ -117,15 +117,15 @@ def display_module_descriptions():
         col4, col5, _ = st.columns(3)
 
         with col4:
-            st.subheader(SYNCHRO_MARCHE, anchor=False)
+            st.subheader(EXPORT_GRANDS_VOLUMES, anchor=False)
             st.markdown("""
-            Synchroniser chaque mois les avis du marché, jusqu'à 500 000 mentions.
+            Exporter de gros volumes, jusqu'à 500 000 mentions : la synchro mensuelle du marché.
             - Export page par page, enregistré au fil de l'eau
             - Arrêt et reprise au dernier point sûr
             - Contrôles qualité avant de déclarer l'export terminé
             - Fichiers téléchargeables et historique des exports
 
-            **Idéal pour :** la synchro mensuelle, qui doit être complète et vérifiée.
+            **Idéal pour :** la synchro mensuelle du marché, qui doit être complète et vérifiée.
             """)
 
         with col5:
@@ -150,7 +150,7 @@ def display_workflow_guide():
            - **{EXPORT_MANUEL}** : importez la configuration, testez avec un aperçu, puis lancez l'export complet ;
            - **{EXPORT_SEGMENT}** : importez la configuration et exportez tous les avis d'une catégorie,
              d'un segment ou des marques choisies ;
-           - **{SYNCHRO_MARCHE}** : l'export mensuel du marché, avec reprise après arrêt et contrôles qualité.
+           - **{EXPORT_GRANDS_VOLUMES}** : la synchro mensuelle du marché, avec reprise après arrêt et contrôles qualité.
         3. **Suivre** ({JOURNAL}) : retrouvez l'historique de vos exports.
 
         Conseils : utilisez les aperçus avant les exports complets, sauvegardez vos configurations
@@ -208,11 +208,11 @@ def main():
     elif module_choice == EXPORT_SEGMENT:
         module3_bulk_export.main()
 
-    elif module_choice == SYNCHRO_MARCHE:
+    elif module_choice == EXPORT_GRANDS_VOLUMES:
         if bulk_v2_available:
             module4_bulk_export_v2.main()
         else:
-            st.error(f"{SYNCHRO_MARCHE} indisponible ({type(bulk_v2_error).__name__}). Les autres modules "
+            st.error(f"{EXPORT_GRANDS_VOLUMES} indisponible ({type(bulk_v2_error).__name__}). Les autres modules "
                      "fonctionnent ; vérifiez l'installation de l'application, puis rechargez la page.",
                      icon=":material/error:")
 

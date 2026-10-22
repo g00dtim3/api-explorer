@@ -648,7 +648,7 @@ Référence : `docs/charte/DESIGN_GUIDE.md` et `docs/charte/SPRINT_charte.md`. S
 ### Noms des pages (22/10/2026, décision de l'utilisateur)
 Noms affichés alignés sur l'usage de chaque page :
 - module 3 (« Export bulk », V1) → **Export par segment** : catégories, segments, marques ;
-- module 4 (« Bulk Export V2 ») → **Synchro mensuelle du marché**.
+- module 4 (« Bulk Export V2 ») → **Export grands volumes** (sert à la synchro mensuelle du marché).
 Seuls les libellés à l'écran changent : les fichiers, le paquet `bulk_export`, le schéma `bulk_export` et la
 documentation gardent le nom « Bulk Export V2 ». Le module 3 étant non modifiable, son propre titre
 (« Module 3 - Export Bulk ») ne change pas.

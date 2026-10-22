@@ -92,7 +92,7 @@ def test_t3_bon_mot_de_passe_puis_t5_rafraichissement(monkeypatch):
     monkeypatch.setattr(requests, "get", lambda *a, **k: R())
     at = login(app().run(), FAKE_PASSWORD)
     assert not at.exception, at.exception
-    assert len(at.sidebar.radio) == 1 and ":material/calendar_month: Synchro mensuelle du marché" in at.sidebar.radio[0].options  # T3
+    assert len(at.sidebar.radio) == 1 and ":material/database: Export grands volumes" in at.sidebar.radio[0].options  # T3
     assert "mot_de_passe_saisi" not in at.session_state  # S4 : saisie effacée
     fresh = app().run()  # T5 : nouvelle session (rafraîchissement) → mot de passe redemandé
     assert [t.value for t in fresh.title] == ["Accès protégé"]
