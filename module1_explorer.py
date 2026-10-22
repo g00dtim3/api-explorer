@@ -637,7 +637,7 @@ def display_export_configuration():
         # Recommandation de module
         strategy = st.session_state.get("export_strategy", "")
         if strategy == STRATEGIE_MASSE:
-            encadre_cle("Utilisez l'Export bulk (V1) pour cette configuration.", titre="Recommandation")
+            encadre_cle("Utilisez l'Export par segment pour cette configuration.", titre="Recommandation")
         else:
             encadre_cle("Utilisez l'Export manuel pour cette configuration.", titre="Recommandation")
 

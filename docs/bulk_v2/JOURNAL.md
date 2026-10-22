@@ -644,3 +644,11 @@ Référence : `docs/charte/DESIGN_GUIDE.md` et `docs/charte/SPRINT_charte.md`. S
 - Le module 3 garde ses emojis tant que sa modification n'est pas autorisée.
 
 `pytest` : **320 réussis** (307 + 11 tests de la charte + 2 tests des corrections), base Postgres 16 locale comprise.
+
+### Noms des pages (22/10/2026, décision de l'utilisateur)
+Noms affichés alignés sur l'usage de chaque page :
+- module 3 (« Export bulk », V1) → **Export par segment** : catégories, segments, marques ;
+- module 4 (« Bulk Export V2 ») → **Synchro mensuelle du marché**.
+Seuls les libellés à l'écran changent : les fichiers, le paquet `bulk_export`, le schéma `bulk_export` et la
+documentation gardent le nom « Bulk Export V2 ». Le module 3 étant non modifiable, son propre titre
+(« Module 3 - Export Bulk ») ne change pas.

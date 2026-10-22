@@ -558,7 +558,7 @@ def display_export_journal():
     log_path = Path("review_exports_log.csv")
     
     if not log_path.exists():
-        vide("Aucun export n'a encore été réalisé. Lancez un export depuis l'Export manuel ou l'Export bulk (V1).")
+        vide("Aucun export n'a encore été réalisé. Lancez un export depuis l'Export manuel ou l'Export par segment.")
         return
     
     try:
@@ -566,7 +566,7 @@ def display_export_journal():
         df_log = pd.read_csv(log_path)
         
         if df_log.empty:
-            vide("Le journal des exports est vide. Lancez un export depuis l'Export manuel ou l'Export bulk (V1).")
+            vide("Le journal des exports est vide. Lancez un export depuis l'Export manuel ou l'Export par segment.")
             return
         
         # Convertir les dates

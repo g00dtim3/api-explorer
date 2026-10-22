@@ -47,15 +47,16 @@ def _charger_modules():
 ACCUEIL = "Accueil"
 EXPLORATEUR = "Explorateur API"
 EXPORT_MANUEL = "Export manuel"
-EXPORT_BULK_V1 = "Export bulk (V1)"
-BULK_V2 = "Bulk Export V2"
+EXPORT_SEGMENT = "Export par segment"           # module 3 (ancien « Export bulk »)
+SYNCHRO_MARCHE = "Synchro mensuelle du marché"  # module 4 (« Bulk Export V2 » dans le code et la doc)
 JOURNAL = "Journal des exports"
 MODULES = {
     ACCUEIL: ("Explorer, exporter et suivre les avis de l'API Ratings & Reviews.", "home"),
     EXPLORATEUR: ("Filtrer, choisir les produits et estimer le volume avant un export.", "search"),
     EXPORT_MANUEL: ("Exporter les avis des produits sélectionnés, en aperçu ou en entier.", "checklist"),
-    EXPORT_BULK_V1: (None, "inventory_2"),
-    BULK_V2: ("Export traçable, reprenable et vérifiable, jusqu'à 500 000 mentions.", "database"),
+    EXPORT_SEGMENT: (None, "inventory_2"),
+    SYNCHRO_MARCHE: ("Export mensuel du marché : traçable, reprenable et vérifiable, jusqu'à 500 000 mentions.",
+                     "calendar_month"),
     JOURNAL: ("Historique des exports réalisés depuis cette application.", "history"),
 }
 
@@ -103,9 +104,9 @@ def display_module_descriptions():
             """)
 
         with col3:
-            st.subheader(EXPORT_BULK_V1, anchor=False)
+            st.subheader(EXPORT_SEGMENT, anchor=False)
             st.markdown("""
-            Exporter tous les avis des marques choisies.
+            Exporter tous les avis d'une catégorie, d'un segment ou de marques choisies.
             - Import de la configuration
             - Pas de sélection produit par produit
             - Analyses rapides intégrées
@@ -116,15 +117,15 @@ def display_module_descriptions():
         col4, col5, _ = st.columns(3)
 
         with col4:
-            st.subheader(BULK_V2, anchor=False)
+            st.subheader(SYNCHRO_MARCHE, anchor=False)
             st.markdown("""
-            Exporter de gros volumes, jusqu'à 500 000 mentions.
+            Synchroniser chaque mois les avis du marché, jusqu'à 500 000 mentions.
             - Export page par page, enregistré au fil de l'eau
             - Arrêt et reprise au dernier point sûr
             - Contrôles qualité avant de déclarer l'export terminé
             - Fichiers téléchargeables et historique des exports
 
-            **Idéal pour :** les exports volumineux qui doivent être complets et vérifiés.
+            **Idéal pour :** la synchro mensuelle, qui doit être complète et vérifiée.
             """)
 
         with col5:
@@ -147,8 +148,9 @@ def display_workflow_guide():
            puis exportez la configuration JSON.
         2. **Exporter**, selon le besoin :
            - **{EXPORT_MANUEL}** : importez la configuration, testez avec un aperçu, puis lancez l'export complet ;
-           - **{EXPORT_BULK_V1}** : importez la configuration et exportez tous les avis des marques choisies ;
-           - **{BULK_V2}** : pour les gros volumes, avec reprise après arrêt et contrôles qualité.
+           - **{EXPORT_SEGMENT}** : importez la configuration et exportez tous les avis d'une catégorie,
+             d'un segment ou des marques choisies ;
+           - **{SYNCHRO_MARCHE}** : l'export mensuel du marché, avec reprise après arrêt et contrôles qualité.
         3. **Suivre** ({JOURNAL}) : retrouvez l'historique de vos exports.
 
         Conseils : utilisez les aperçus avant les exports complets, sauvegardez vos configurations
@@ -190,7 +192,7 @@ def main():
 
     # Titre de la page : le bandeau, sauf pour le module 3 qui garde son propre titre.
     sous_titre = MODULES[module_choice][0]
-    if module_choice != EXPORT_BULK_V1:
+    if module_choice != EXPORT_SEGMENT:
         bandeau(APPLI, module_choice, sous_titre=sous_titre)
 
     # Affichage des quotas en tête
@@ -203,14 +205,14 @@ def main():
     elif module_choice == EXPORT_MANUEL:
         module2_manual_export.main()
 
-    elif module_choice == EXPORT_BULK_V1:
+    elif module_choice == EXPORT_SEGMENT:
         module3_bulk_export.main()
 
-    elif module_choice == BULK_V2:
+    elif module_choice == SYNCHRO_MARCHE:
         if bulk_v2_available:
             module4_bulk_export_v2.main()
         else:
-            st.error(f"Bulk Export V2 indisponible ({type(bulk_v2_error).__name__}). Les autres modules "
+            st.error(f"{SYNCHRO_MARCHE} indisponible ({type(bulk_v2_error).__name__}). Les autres modules "
                      "fonctionnent ; vérifiez l'installation de l'application, puis rechargez la page.",
                      icon=":material/error:")
 

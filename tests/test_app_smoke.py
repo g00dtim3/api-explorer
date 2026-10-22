@@ -2,7 +2,7 @@
 
 - Bulk Export V2 sans Supabase : message clair, pas de plantage.
 - Bulk Export V2 avec la base de test : le Monitor affiche un export et ses événements.
-- Application principale : l'accueil, les 4 entrées d'origine et Bulk Export V2 se chargent.
+- Application principale : l'accueil, les 4 entrées d'origine et la Synchro mensuelle du marché se chargent.
 """
 
 import json
@@ -131,7 +131,8 @@ def test_application_principale_toutes_les_entrees():
     assert not at.exception, at.exception
     nav = at.sidebar.radio[0]
     assert [o.split(": ", 1)[1] for o in nav.options] == ["Accueil", "Explorateur API", "Export manuel",
-                                                           "Export bulk (V1)", "Bulk Export V2", "Journal des exports"]
+                                                           "Export par segment", "Synchro mensuelle du marché",
+                                                           "Journal des exports"]
     for option in nav.options:
         at.sidebar.radio[0].set_value(option).run()
         assert not at.exception, (option, at.exception)
