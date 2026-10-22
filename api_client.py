@@ -6,11 +6,14 @@ import requests
 import urllib.parse
 from functools import lru_cache
 
+from bulk_export.logging_utils import mask, register_secret
+
 
 class APIClient:
     def __init__(self):
         self.BASE_URL = "https://api-pf.ratingsandreviews-beauty.com"
         self.TOKEN = st.secrets["api"]["token"]
+        register_secret(self.TOKEN)  # le token ne doit jamais apparaître dans un message (règle n°8)
     
     def _quote_strict(self, string, safe='/', encoding=None, errors=None):
         """Encodage strict des paramètres URL"""
@@ -22,14 +25,17 @@ class APIClient:
         if params is None:
             params = {}
         elif isinstance(params, str):
-            st.error("❌ ERREUR: `params` doit être un dict ou une liste de tuples, pas une chaîne.")
+            st.error("Paramètres invalides : `params` doit être un dict ou une liste de tuples, pas une chaîne.",
+                     icon=":material/error:")
             return {}
         
-        # Ajouter le token
+        # Ajouter le token (sur une copie : le dictionnaire de l'appelant ne doit pas recevoir le token)
         if isinstance(params, dict):
+            params = dict(params)
             params["token"] = _self.TOKEN
             query_string = urllib.parse.urlencode(params, doseq=True, quote_via=_self._quote_strict)
         else:
+            params = list(params)
             params.append(("token", _self.TOKEN))
             query_string = urllib.parse.urlencode(params, doseq=True, quote_via=_self._quote_strict)
         
@@ -40,11 +46,12 @@ class APIClient:
             if response.status_code == 200:
                 return response.json().get("result", {})
             else:
-                st.error(f"Erreur {response.status_code} sur {url}")
-                st.error(f"Réponse: {response.text}")
+                # Adresse et réponse masquées : le token est dans l'adresse (règle n°8)
+                st.error(mask(f"Erreur {response.status_code} sur {url}"), icon=":material/error:")
+                st.error(mask(f"Réponse : {response.text}"))
                 return {}
         except Exception as e:
-            st.error(f"Erreur de connexion: {str(e)}")
+            st.error(mask(f"Erreur de connexion : {str(e)}. Réessayez dans un instant."), icon=":material/error:")
             return {}
     
     def fetch(self, endpoint, params=None):
