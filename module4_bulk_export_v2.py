@@ -105,7 +105,7 @@ def _filters_form() -> dict[str, str]:
 
 
 def _import_block() -> dict[str, str] | None:
-    text = st.text_area("Collez une configuration JSON (Bulk Export V2, ou ancien format des modules 1 à 3)",
+    text = st.text_area("Collez une configuration JSON (Export grands volumes, ou ancien format des autres modules)",
                         height=160, key="bv2_import_text")
     if st.button("Charger la configuration", key="bv2_import_btn", icon=":material/upload_file:"):
         try:
