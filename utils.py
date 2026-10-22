@@ -9,12 +9,22 @@ import ast
 from pathlib import Path
 import io
 
+from charte import vide
+
 # Vérification des dépendances optionnelles
 try:
     import openpyxl
     EXCEL_AVAILABLE = True
 except ImportError:
     EXCEL_AVAILABLE = False
+
+
+def format_nombre(valeur):
+    """Nombre au format français, espace comme séparateur de milliers (189 824)."""
+    try:
+        return f"{int(valeur):,}".replace(",", "\u00a0")
+    except (TypeError, ValueError):
+        return str(valeur)
 
 
 def initialize_session_state():
@@ -148,14 +158,14 @@ def load_configuration_from_json(json_input):
         cleaned_input = json_input.strip()
         
         if not cleaned_input.startswith('{'):
-            st.error("❌ Le JSON doit commencer par '{'")
+            st.error("Configuration illisible : le JSON doit commencer par « { ». Collez la configuration complète.", icon=":material/error:")
             return False
         
         # Parser le JSON
         try:
             parsed = json.loads(cleaned_input)
         except json.JSONDecodeError as e:
-            st.error(f"❌ Erreur JSON à la ligne {e.lineno}, position {e.colno}: {e.msg}")
+            st.error(f"Configuration illisible : erreur JSON à la ligne {e.lineno}, position {e.colno} ({e.msg}).", icon=":material/error:")
             st.error("Vérifiez que :")
             st.error("- Toutes les clés et valeurs sont entre guillemets")
             st.error("- Il y a des virgules entre chaque paire clé-valeur")
@@ -172,7 +182,7 @@ def load_configuration_from_json(json_input):
                 "country": "France",
                 "selected_products": ["Product1", "Product2"]
             }
-            st.info("📝 Exemple de JSON valide :")
+            st.info("Exemple de JSON valide :", icon=":material/info:")
             st.code(json.dumps(example_json, indent=2), language="json")
             return False
         
@@ -216,14 +226,14 @@ def load_configuration_from_json(json_input):
         if selected_products:
             st.session_state.selected_product_ids = selected_products
         
-        st.success("✅ Configuration chargée avec succès.")
-        st.info(f"📊 Résumé : {len(st.session_state.filters['brand'])} marque(s), du {parsed.get('start-date')} au {parsed.get('end-date')}")
+        st.success("Configuration chargée.", icon=":material/check_circle:")
+        st.info(f"Résumé : {len(st.session_state.filters['brand'])} marque(s), du {parsed.get('start-date')} au {parsed.get('end-date')}", icon=":material/info:")
         
         return True
         
     except Exception as e:
-        st.error(f"❌ Erreur lors du parsing : {e}")
-        st.error("💡 Astuce : Vérifiez que votre JSON est valide sur jsonlint.com")
+        st.error(f"Configuration illisible : {e}.", icon=":material/error:")
+        st.error("Vérifiez que votre JSON est valide (par exemple sur jsonlint.com), puis rechargez-le.")
         return False
 
 
@@ -401,7 +411,7 @@ def display_quotas():
 def create_excel_download(df, sheet_name='Data'):
     """Crée un fichier Excel pour téléchargement (avec gestion d'erreur)"""
     if not EXCEL_AVAILABLE:
-        st.warning("⚠️ openpyxl non installé. Export Excel non disponible.")
+        st.warning("Export Excel indisponible : le paquet openpyxl n'est pas installé. Utilisez le CSV.", icon=":material/warning:")
         return None
     
     try:
@@ -410,7 +420,7 @@ def create_excel_download(df, sheet_name='Data'):
             df.to_excel(writer, index=False, sheet_name=sheet_name)
         return excel_buffer.getvalue()
     except Exception as e:
-        st.error(f"❌ Erreur lors de la création du fichier Excel : {e}")
+        st.error(f"Fichier Excel impossible à créer : {e}. Utilisez le CSV.", icon=":material/error:")
         return None
 
 
@@ -435,10 +445,11 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
     with col1:
         csv_data = df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button(
-            "📂 Télécharger CSV",
+            "Télécharger le CSV",
             csv_data,
             file_name=csv_filename,
-            mime="text/csv"
+            mime="text/csv",
+            icon=":material/download:"
         )
     
     # Excel (conditionnel)
@@ -447,10 +458,11 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
             excel_data = create_excel_download(df)
             if excel_data:
                 st.download_button(
-                    "📄 Télécharger Excel",
+                    "Télécharger l'Excel",
                     excel_data,
                     file_name=excel_filename,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    icon=":material/table_view:"
                 )
         
         # Format plat
@@ -463,10 +475,11 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
                     flat_filename = f"{filename_base}_page{page}_plat.csv"
                 
                 st.download_button(
-                    "📃 Format plat",
+                    "Télécharger le format plat",
                     flat_csv,
                     file_name=flat_filename,
-                    mime="text/csv"
+                    mime="text/csv",
+                    icon=":material/description:"
                 )
             except Exception as e:
                 st.warning(f"Erreur format plat : {e}")
@@ -481,10 +494,11 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
                     flat_filename = f"{filename_base}_page{page}_plat.csv"
                 
                 st.download_button(
-                    "📃 Format plat",
+                    "Télécharger le format plat",
                     flat_csv,
                     file_name=flat_filename,
-                    mime="text/csv"
+                    mime="text/csv",
+                    icon=":material/description:"
                 )
             except Exception as e:
                 st.warning(f"Erreur format plat : {e}")
@@ -494,7 +508,7 @@ def display_excel_warning():
     """Affiche un avertissement si Excel n'est pas disponible"""
     if not EXCEL_AVAILABLE:
         st.warning("""
-        ⚠️ **Export Excel non disponible**
+        **Export Excel non disponible**
         
         Le package `openpyxl` n'est pas installé. Pour activer l'export Excel :
         ```bash
@@ -502,7 +516,7 @@ def display_excel_warning():
         ```
         
         En attendant, vous pouvez utiliser les formats CSV et plat.
-        """)
+        """, icon=":material/warning:")
 
 
 def log_export_activity(export_params, nb_reviews, export_type="STANDARD"):
@@ -533,20 +547,18 @@ def log_export_activity(export_params, nb_reviews, export_type="STANDARD"):
             log_df = new_log_df
         
         log_df.to_csv(log_path, index=False)
-        st.success(f"📝 Export {export_type} enregistré dans le journal")
+        st.success(f"Export {export_type} enregistré dans le journal.", icon=":material/check_circle:")
         
     except Exception as e:
-        st.warning(f"⚠️ Erreur lors de l'enregistrement du log : {str(e)}")
+        st.warning(f"Export non enregistré dans le journal : {str(e)}. Le fichier exporté, lui, est valide.", icon=":material/warning:")
 
 
 def display_export_journal():
     """Affiche le journal des exports avec interface de consultation"""
     log_path = Path("review_exports_log.csv")
     
-    st.header("📋 Journal des exports")
-    
     if not log_path.exists():
-        st.info("📁 Aucun export n'a encore été réalisé.")
+        vide("Aucun export n'a encore été réalisé. Lancez un export depuis l'Export manuel ou l'Export bulk (V1).")
         return
     
     try:
@@ -554,7 +566,7 @@ def display_export_journal():
         df_log = pd.read_csv(log_path)
         
         if df_log.empty:
-            st.info("📁 Le journal des exports est vide.")
+            vide("Le journal des exports est vide. Lancez un export depuis l'Export manuel ou l'Export bulk (V1).")
             return
         
         # Convertir les dates
@@ -566,24 +578,24 @@ def display_export_journal():
         
         with col1:
             total_exports = len(df_log)
-            st.metric("📊 Total exports", total_exports)
+            st.metric("Total exports", format_nombre(total_exports), border=True)
         
         with col2:
             total_reviews = df_log['nb_reviews'].sum()
-            st.metric("📝 Reviews exportées", f"{total_reviews:,}")
+            st.metric("Avis exportés", format_nombre(total_reviews), border=True)
         
         with col3:
             unique_brands = df_log['brand'].nunique()
-            st.metric("🏢 Marques uniques", unique_brands)
+            st.metric("Marques différentes", format_nombre(unique_brands), border=True)
         
         with col4:
             if not df_log.empty:
                 last_export = df_log['export_timestamp'].max()
                 days_ago = (datetime.datetime.now() - last_export).days
-                st.metric("🕒 Dernier export", f"Il y a {days_ago} jour(s)")
+                st.metric("Dernier export", f"Il y a {days_ago} jour(s)", border=True)
         
         # Filtres
-        st.markdown("### 🔍 Filtres")
+        st.subheader("Filtres", anchor=False)
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -625,13 +637,13 @@ def display_export_journal():
             filtered_df = filtered_df[filtered_df['brand'] == selected_brand]
         
         # Affichage du tableau
-        st.markdown(f"### 📊 Historique ({len(filtered_df)} exports)")
+        st.subheader(f"Historique ({format_nombre(len(filtered_df))} exports)", anchor=False)
         
         if not filtered_df.empty:
             # Formatter l'affichage
             display_df = filtered_df.copy()
             display_df['export_timestamp'] = display_df['export_timestamp'].dt.strftime('%Y-%m-%d %H:%M')
-            display_df['nb_reviews'] = display_df['nb_reviews'].apply(lambda x: f"{x:,}")
+            display_df['nb_reviews'] = display_df['nb_reviews'].apply(format_nombre)
             
             # Réorganiser les colonnes
             columns_order = [
@@ -647,7 +659,7 @@ def display_export_journal():
             column_names = {
                 'export_timestamp': 'Date/Heure',
                 'export_type': 'Type',
-                'nb_reviews': 'Reviews',
+                'nb_reviews': 'Avis',
                 'brand': 'Marque',
                 'product': 'Produits',
                 'start_date': 'Début',
@@ -662,63 +674,61 @@ def display_export_journal():
             st.dataframe(
                 display_df, 
                 use_container_width=True,
+                hide_index=True,
                 height=400
             )
             
             # Boutons d'action
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
+            with st.container(horizontal=True):
                 # Export du journal
                 csv_journal = filtered_df.to_csv(index=False)
                 st.download_button(
-                    "💾 Télécharger le journal",
+                    "Télécharger le journal",
                     csv_journal,
                     file_name=f"journal_exports_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
+                    mime="text/csv",
+                    icon=":material/download:"
                 )
-            
-            with col2:
                 # Statistiques détaillées
-                if st.button("📈 Statistiques détaillées"):
-                    display_detailed_stats(filtered_df)
-            
-            with col3:
+                show_stats = st.button("Afficher les statistiques détaillées", icon=":material/bar_chart:")
                 # Nettoyage du journal
-                if st.button("🗑️ Nettoyer le journal", help="Supprime les exports de plus de 30 jours"):
-                    clean_old_exports(log_path)
+                clean_log = st.button("Nettoyer le journal", help="Supprime les exports de plus de 30 jours",
+                                      icon=":material/delete_sweep:")
+            if show_stats:
+                display_detailed_stats(filtered_df)
+            if clean_log:
+                clean_old_exports(log_path)
         else:
-            st.info("Aucun export ne correspond aux filtres sélectionnés.")
+            vide("Aucun export ne correspond aux filtres. Élargissez la période ou choisissez « Tous ».")
     
     except Exception as e:
-        st.error(f"❌ Erreur lors de la lecture du journal : {e}")
-        st.info("Le journal peut être corrompu. Vous pouvez le supprimer pour repartir à zéro.")
+        st.error(f"Journal illisible : {e}. Le fichier est peut-être corrompu : supprimez-le pour repartir à zéro.", icon=":material/error:")
 
 
 def display_detailed_stats(df_log):
     """Affiche des statistiques détaillées sur les exports"""
-    st.markdown("### 📈 Statistiques détaillées")
+    st.subheader("Statistiques détaillées", anchor=False)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### 🔄 Répartition par type")
+        st.markdown("#### Répartition par type")
         if not df_log.empty:
             type_counts = df_log['export_type'].value_counts()
             st.bar_chart(type_counts)
         
-        st.markdown("#### 📅 Évolution temporelle")
+        st.markdown("#### Évolution dans le temps")
         if not df_log.empty:
             df_daily = df_log.groupby(df_log['export_timestamp'].dt.date)['nb_reviews'].sum()
             st.line_chart(df_daily)
     
     with col2:
-        st.markdown("#### 🏢 Top marques")
+        st.markdown("#### Marques les plus exportées")
         if not df_log.empty:
             brand_stats = df_log.groupby('brand')['nb_reviews'].sum().sort_values(ascending=False).head(10)
             st.bar_chart(brand_stats)
         
-        st.markdown("#### 📊 Volumes par export")
+        st.markdown("#### Volumes par export")
         if not df_log.empty:
             volume_ranges = pd.cut(
                 df_log['nb_reviews'], 
@@ -741,13 +751,13 @@ def clean_old_exports(log_path, days_to_keep=30):
         
         if removed_count > 0:
             df_cleaned.to_csv(log_path, index=False)
-            st.success(f"✅ {removed_count} anciens exports supprimés (> {days_to_keep} jours)")
+            st.success(f"{removed_count} anciens exports supprimés (plus de {days_to_keep} jours).", icon=":material/check_circle:")
             st.rerun()
         else:
-            st.info("Aucun ancien export à supprimer")
+            st.info("Aucun ancien export à supprimer.", icon=":material/info:")
     
     except Exception as e:
-        st.error(f"❌ Erreur lors du nettoyage : {e}")
+        st.error(f"Nettoyage impossible : {e}. Réessayez.", icon=":material/error:")
     """Enregistre l'activité d'export dans un fichier log"""
     try:
         log_path = Path("review_exports_log.csv")
@@ -775,7 +785,7 @@ def clean_old_exports(log_path, days_to_keep=30):
             log_df = new_log_df
         
         log_df.to_csv(log_path, index=False)
-        st.success(f"📝 Export {export_type} enregistré dans le journal")
+        st.success(f"Export {export_type} enregistré dans le journal.", icon=":material/check_circle:")
         
     except Exception as e:
-        st.warning(f"⚠️ Erreur lors de l'enregistrement du log : {str(e)}")
+        st.warning(f"Export non enregistré dans le journal : {str(e)}. Le fichier exporté, lui, est valide.", icon=":material/warning:")

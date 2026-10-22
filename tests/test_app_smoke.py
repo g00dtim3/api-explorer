@@ -2,7 +2,7 @@
 
 - Bulk Export V2 sans Supabase : message clair, pas de plantage.
 - Bulk Export V2 avec la base de test : le Monitor affiche un export et ses événements.
-- Application principale : les 4 entrées d'origine et Bulk Export V2 se chargent.
+- Application principale : l'accueil, les 4 entrées d'origine et Bulk Export V2 se chargent.
 """
 
 import json
@@ -106,7 +106,7 @@ def test_bulk_v2_monitor_affiche_un_export(pg_conn):
     at.session_state["authentifie"] = True
     at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
                                  "db_schema": "bulk_export_test"}
-    at.session_state["bv2_tab"] = "Export Monitor"
+    at.session_state["bv2_tab"] = "Suivi"
     at.run()
     assert not at.exception, at.exception
     text = all_text(at)
@@ -114,7 +114,7 @@ def test_bulk_v2_monitor_affiche_un_export(pg_conn):
     assert "Connexion à Supabase impossible" not in text
 
     # New Export : formulaire chargé, lancement bloqué tant qu'il n'y a pas d'estimation.
-    at.session_state["bv2_tab"] = "New Export"
+    at.session_state["bv2_tab"] = "Nouvel export"
     at.run()
     assert not at.exception, at.exception
     assert any("Estimez" in i.value for i in at.info)
@@ -130,8 +130,8 @@ def test_application_principale_toutes_les_entrees():
     at.run()
     assert not at.exception, at.exception
     nav = at.sidebar.radio[0]
-    assert nav.options == ["🔍 Module 1 - Explorateur API", "🎯 Module 2 - Export Manuel", "🚀 Module 3 - Export Bulk",
-                           "🧱 Bulk Export V2", "📋 Journal des exports"]
+    assert [o.split(": ", 1)[1] for o in nav.options] == ["Accueil", "Explorateur API", "Export manuel",
+                                                           "Export bulk (V1)", "Bulk Export V2", "Journal des exports"]
     for option in nav.options:
         at.sidebar.radio[0].set_value(option).run()
         assert not at.exception, (option, at.exception)
@@ -158,7 +158,7 @@ def test_bulk_v2_estimer_lancer_suivre(pg_conn):
     assert not launch.disabled
     launch.click().run()
     assert not at.exception, at.exception
-    assert at.session_state["bv2_tab"] == "Export Monitor"
+    assert at.session_state["bv2_tab"] == "Suivi"
 
     (export_id,) = [r[0] for r in pg_conn.execute("SELECT export_id FROM exports").fetchall()]
     deadline = time.monotonic() + 20
@@ -199,19 +199,19 @@ def test_downloads_et_history(pg_conn, monkeypatch):
     at.secrets["bulk_export"] = {"database_url": os.environ["BULK_EXPORT_TEST_DATABASE_URL"],
                                  "db_schema": "bulk_export_test", "supabase_url": "https://fake.supabase.co",
                                  "supabase_service_key": "sb_secret_FAKEkey000111"}
-    at.session_state["bv2_tab"] = "Downloads"
+    at.session_state["bv2_tab"] = "Téléchargements"
     at.run()
     assert not at.exception, at.exception
     links = [e for e in at.get("link_button")]
     assert len(links) == 2 and "CSV complet" in links[0].proto.label
     assert "sb_secret_FAKEkey000111" not in all_text(at)
 
-    at.session_state["bv2_tab"] = "Export History"
+    at.session_state["bv2_tab"] = "Historique"
     at.run()
     assert not at.exception, at.exception
     assert paused in str(at.dataframe[0].value) and done in str(at.dataframe[0].value)
     # Lot 1A : taille de la base, colonne « Brut en base », bouton « Réhydrater » pour un export purgé.
-    assert {m.label for m in at.metric} == {"Taille de la base (tous schémas)", "Brut en base (raw_mentions)"}
+    assert {m.label for m in at.metric} == {"Taille de la base (tous schémas)", "Mentions brutes conservées en base"}
     assert list(at.dataframe[0].value["Brut en base"]) == ["conservé", "conservé"]
     assert not [b for b in at.button if b.label == "Réhydrater le brut"]
     pg_conn.execute("UPDATE exports SET raw_purged_at = now() WHERE export_id = %s", (done,))

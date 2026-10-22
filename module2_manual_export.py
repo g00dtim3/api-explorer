@@ -19,46 +19,50 @@ from utils import (
     log_export_activity,
     create_excel_download,
     display_download_buttons,
-    display_excel_warning
+    display_excel_warning,
+    format_nombre
 )
+from charte import section, vide
+
+# Mode d'export (libellés affichés ET valeurs comparées dans le code)
+MODE_APERCU = "Aperçu (50 avis au plus)"
+MODE_COMPLET = "Export complet"
 
 
 def display_configuration_interface():
     """Interface de chargement de configuration"""
-    st.header("📥 Configuration d'export")
-    
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("### 📎 Charger une configuration existante")
+        st.markdown("#### Charger une configuration existante")
         json_input = st.text_area(
             "Collez votre configuration JSON ici",
             height=200,
-            help="Configuration générée par le Module 1 - Explorateur"
+            help="Configuration générée par l'Explorateur API"
         )
         
-        if st.button("🔄 Charger la configuration", type="primary"):
+        if st.button("Charger la configuration", type="primary", icon=":material/upload_file:"):
             if load_configuration_from_json(json_input):
-                st.success("Configuration chargée avec succès !")
+                st.success("Configuration chargée.", icon=":material/check_circle:")
                 st.rerun()
     
     with col2:
-        st.markdown("### 📋 Configuration actuelle")
+        st.markdown("#### Configuration actuelle")
         if st.session_state.get("filters"):
             filters = st.session_state.filters
             selected_products = st.session_state.get("selected_product_ids", [])
             
-            st.metric("Marques", len(filters.get("brand", [])))
-            st.metric("Produits sélectionnés", len(selected_products))
-            st.metric("Période", f"{filters.get('start_date')} → {filters.get('end_date')}")
+            st.metric("Marques", len(filters.get("brand", [])), border=True)
+            st.metric("Produits sélectionnés", len(selected_products), border=True)
+            st.metric("Période", f"{filters.get('start_date')} → {filters.get('end_date')}", border=True)
             
-            if st.button("🗑️ Effacer la configuration"):
+            if st.button("Effacer la configuration", icon=":material/delete:"):
                 st.session_state.filters = {}
                 st.session_state.selected_product_ids = []
                 st.session_state.apply_filters = False
                 st.rerun()
         else:
-            st.info("Aucune configuration chargée")
+            vide("Aucune configuration chargée. Collez celle de l'Explorateur API, puis chargez-la.")
 
 
 def display_configuration_summary():
@@ -69,22 +73,19 @@ def display_configuration_summary():
     filters = st.session_state.filters
     selected_products = st.session_state.get("selected_product_ids", [])
     
-    st.markdown("---")
-    st.header("📋 Configuration chargée")
-    
     # Résumé des filtres
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 🔍 Filtres")
-        st.markdown(f"**📅 Période :** `{filters['start_date']}` → `{filters['end_date']}`")
-        st.markdown(f"**🏷️ Catégorie :** `{filters.get('category', 'ALL')}`")
-        st.markdown(f"**🏷️ Sous-catégorie :** `{filters.get('subcategory', 'ALL')}`")
-        st.markdown(f"**🏢 Marques :** `{', '.join(filters.get('brand', []))}`")
+        st.markdown("#### Filtres")
+        st.markdown(f"**Période :** `{filters['start_date']}` → `{filters['end_date']}`")
+        st.markdown(f"**Catégorie :** `{filters.get('category', 'ALL')}`")
+        st.markdown(f"**Sous-catégorie :** `{filters.get('subcategory', 'ALL')}`")
+        st.markdown(f"**Marques :** `{', '.join(filters.get('brand', []))}`")
     
     with col2:
-        st.markdown("### 🎯 Sélection")
-        st.markdown(f"**📦 Produits sélectionnés :** `{len(selected_products)}`")
+        st.markdown("#### Sélection")
+        st.markdown(f"**Produits sélectionnés :** `{len(selected_products)}`")
         
         if selected_products:
             # Afficher quelques produits en exemple
@@ -107,9 +108,9 @@ def display_volume_estimation():
     if not selected_products:
         return
     
-    st.markdown("### 📊 Estimation du volume")
+    st.markdown("#### Estimation du volume")
     
-    if st.button("📈 Calculer le volume total", key="estimate_volume"):
+    if st.button("Calculer le volume total", key="estimate_volume", icon=":material/calculate:"):
         with st.spinner("Calcul du volume..."):
             # Paramètres de base
             base_params = build_filter_params(filters)
@@ -123,41 +124,34 @@ def display_volume_estimation():
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("📊 Volume total estimé", f"{total_reviews:,} reviews")
+                        st.metric("Volume total estimé", f"{format_nombre(total_reviews)} avis", border=True)
                     with col2:
-                        st.metric("📦 Produits", len(selected_products))
+                        st.metric("Produits", len(selected_products), border=True)
                     with col3:
                         avg_per_product = total_reviews / len(selected_products) if selected_products else 0
-                        st.metric("📈 Moyenne par produit", f"{avg_per_product:.0f} reviews")
+                        st.metric("Moyenne par produit", f"{format_nombre(round(avg_per_product))} avis", border=True)
                     
                     # Stocker pour l'interface d'export
                     st.session_state.estimated_volume = total_reviews
                 else:
-                    st.error("❌ Impossible d'obtenir les métriques")
+                    st.error("Volume indisponible : l'API n'a pas renvoyé de métriques. Réessayez dans un instant.", icon=":material/error:")
             except Exception as e:
-                st.error(f"❌ Erreur lors du calcul : {e}")
+                st.error(f"Calcul impossible : {e}. Réessayez dans un instant.", icon=":material/error:")
 
 
 def display_export_interface():
     """Interface principale d'export"""
     if not st.session_state.get("selected_product_ids"):
-        st.warning("⚠️ Aucun produit sélectionné. Chargez d'abord une configuration valide.")
+        st.warning("Aucun produit sélectionné : chargez d'abord une configuration qui contient des produits.", icon=":material/warning:")
         return
     
-    st.markdown("---")
-    st.header("🚀 Export des reviews")
-    
-    # Affichage des quotas
-    with st.expander("📊 Quotas API actuels", expanded=False):
-        display_quotas()
-    
     # Options d'export
-    st.markdown("### ⚙️ Options d'export")
+    st.markdown("#### Options d'export")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### 📄 Paramètres de pagination")
+        st.markdown("##### Pagination")
         rows_per_page = st.number_input(
             "Reviews par page",
             min_value=10,
@@ -179,26 +173,25 @@ def display_export_interface():
             random_seed = None
     
     with col2:
-        st.markdown("#### 🎯 Mode d'export")
+        st.markdown("##### Mode d'export")
         export_mode = st.radio(
             "Type d'export",
-            ["🔍 Aperçu (50 reviews max)", "📦 Export complet"],
+            [MODE_APERCU, MODE_COMPLET],
             help="L'aperçu permet de tester rapidement"
         )
         
-        is_preview = export_mode.startswith("🔍")
+        is_preview = export_mode == MODE_APERCU
         
         # Affichage de l'estimation
         estimated_volume = st.session_state.get("estimated_volume", "?")
         if is_preview:
             export_volume = min(50, estimated_volume) if isinstance(estimated_volume, int) else 50
-            st.info(f"📊 Export prévu : {export_volume} reviews")
+            st.info(f"Export prévu : {format_nombre(export_volume)} avis", icon=":material/info:")
         else:
-            st.info(f"📊 Export prévu : {estimated_volume} reviews")
+            st.info(f"Export prévu : {format_nombre(estimated_volume)} avis", icon=":material/info:")
     
     # Bouton de lancement
-    st.markdown("---")
-    if st.button("🚀 Lancer l'export", type="primary", key="launch_manual_export"):
+    if st.button("Lancer l'export", type="primary", key="launch_manual_export", icon=":material/play_arrow:"):
         execute_manual_export(rows_per_page, use_random, random_seed, is_preview)
 
 
@@ -207,7 +200,7 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
     
     # Vérification anti-double-export
     if st.session_state.get('export_in_progress', False):
-        st.warning("⚠️ Un export est déjà en cours. Veuillez patienter.")
+        st.warning("Un export est déjà en cours : attendez qu'il se termine.", icon=":material/warning:")
         return
     
     # Marquer l'export comme en cours
@@ -229,15 +222,15 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
         total_available = metrics.get("nbDocs", 0) if metrics else 0
         
         if total_available == 0:
-            st.warning("❌ Aucune review disponible pour cette sélection")
+            st.warning("Aucun avis disponible pour cette sélection : élargissez la période ou les produits.", icon=":material/warning:")
             return
         
         # Configuration selon le mode
         if is_preview:
             max_reviews = min(50, total_available)
-            st.info(f"📊 Mode aperçu : Chargement de {max_reviews} reviews maximum")
+            st.info(f"Mode aperçu : chargement de {max_reviews} avis au plus.", icon=":material/info:")
         else:
-            st.info(f"🔄 Export complet : {total_available:,} reviews...")
+            st.info(f"Export complet : {format_nombre(total_available)} avis…", icon=":material/info:")
             
         # Interface de progression
         status_text = st.empty()
@@ -249,28 +242,30 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
         all_docs = []
         max_iterations = 1000 if not is_preview else 10
         
-        st.write(f"🔍 Debug: Démarrage avec cursor='*', rows={export_params['rows']}")
+        # Détails de pagination : repliés, pour ne pas encombrer l'écran
+        details = st.expander("Détails techniques de la pagination", icon=":material/code:")
+        details.write(f"Démarrage avec cursor='*', rows={export_params['rows']}")
         
         # Boucle d'export
         while page_count < max_iterations:
             page_count += 1
             
             current_count = len(all_docs)
-            status_text.text(f"📥 Page {page_count} | Récupéré: {current_count:,}/{total_available:,} reviews")
+            status_text.text(f"Page {page_count} | récupérés : {format_nombre(current_count)} / {format_nombre(total_available)} avis")
             
             # CORRECTION PRINCIPALE: Utiliser "nextCursorMark" au lieu de "cursorMark"
             current_params = export_params.copy()
-            current_params["nextCursorMark"] = cursor_mark  # ✅ CORRECTION
+            current_params["nextCursorMark"] = cursor_mark  # CORRECTION
             
             # Debug des paramètres
             if page_count <= 3:
-                st.write(f"🔍 Page {page_count}: nextCursorMark='{cursor_mark}', rows={current_params['rows']}")
+                details.write(f"Page {page_count}: nextCursorMark='{cursor_mark}', rows={current_params['rows']}")
             
             # Appel API
             result = api_client.get_reviews(**current_params)
             
             if not result or not result.get("docs"):
-                st.warning(f"⚠️ Pas de données à la page {page_count}")
+                st.warning(f"Pas de données à la page {page_count}.", icon=":material/warning:")
                 break
             
             docs = result.get("docs", [])
@@ -278,7 +273,7 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             # Ajouter les reviews
             all_docs.extend(docs)
             
-            st.write(f"📊 Page {page_count}: +{len(docs)} reçus (Total: {len(all_docs)})")
+            details.write(f"Page {page_count}: +{len(docs)} reçus (total : {len(all_docs)})")
             
             # Mise à jour progression
             if progress_bar is not None:
@@ -290,17 +285,17 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             
             # Debug du cursor
             if page_count <= 3:
-                st.write(f"🔍 Cursor reçu: '{next_cursor}'")
-                st.write(f"🔍 Cursor actuel: '{cursor_mark}'")
-                st.write(f"🔍 Cursor identique: {next_cursor == cursor_mark}")
+                details.write(f"Cursor reçu: '{next_cursor}'")
+                details.write(f"Cursor actuel: '{cursor_mark}'")
+                details.write(f"Cursor identique: {next_cursor == cursor_mark}")
             
             # CONDITIONS D'ARRÊT
             if not next_cursor:
-                st.info(f"🏁 Fin: Pas de nextCursorMark")
+                details.write("Fin : pas de nextCursorMark")
                 break
                 
             if next_cursor == cursor_mark:
-                st.info(f"🏁 Fin: Cursor identique ('{cursor_mark}')")
+                details.write(f"Fin : cursor identique ('{cursor_mark}')")
                 break
             
             # MISE À JOUR DU CURSOR
@@ -308,12 +303,12 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             
             # Conditions d'arrêt supplémentaires
             if len(all_docs) >= total_available:
-                st.info(f"🏁 Toutes les reviews récupérées ({len(all_docs)})")
+                st.info(f"Tous les avis sont récupérés ({format_nombre(len(all_docs))}).", icon=":material/info:")
                 break
             
             # En mode aperçu, on s'arrête après avoir assez de reviews
             if is_preview and len(all_docs) >= 50:
-                st.info("🔍 Limite aperçu atteinte")
+                st.info("Limite de l'aperçu atteinte.", icon=":material/info:")
                 break
             
             # Pause entre requêtes
@@ -321,14 +316,14 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
                 time.sleep(0.1)
         
         # Diagnostic final
-        st.write(f"🔍 Diagnostic final: {len(all_docs)} reviews récupérées sur {total_available} attendues")
+        details.write(f"Diagnostic final : {len(all_docs)} avis récupérés sur {total_available} attendus")
         
         # Vérifier les doublons après coup
         if all_docs:
             unique_ids = {doc.get('id') for doc in all_docs if doc.get('id')}
             if len(unique_ids) < len(all_docs):
                 duplicates = len(all_docs) - len(unique_ids)
-                st.warning(f"⚠️ {duplicates} doublons détectés dans le résultat final")
+                st.warning(f"{duplicates} doublons détectés dans le résultat final.", icon=":material/warning:")
         
         # Stocker les résultats
         st.session_state.all_docs = all_docs
@@ -338,7 +333,7 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
         # Messages finaux
         mode_text = "aperçu manuel" if is_preview else "export manuel complet"
         if all_docs:
-            status_text.text(f"✅ {mode_text.capitalize()} terminé! {len(all_docs):,} reviews récupérées")
+            status_text.text(f"{mode_text.capitalize()} terminé : {format_nombre(len(all_docs))} avis récupérés.")
             
             # Log de l'activité
             if not is_preview:
@@ -346,10 +341,10 @@ def execute_manual_export(rows_per_page, use_random, random_seed, is_preview):
             
             st.balloons()
         else:
-            status_text.text("⚠️ Aucune review récupérée")
+            status_text.text("Aucun avis récupéré.")
     
     except Exception as e:
-        st.error(f"❌ Erreur lors de l'export : {str(e)}")
+        st.error(f"Export interrompu : {str(e)}. Relancez l'export ; si l'erreur revient, essayez l'aperçu.", icon=":material/error:")
     
     finally:
         # Toujours libérer le verrou
@@ -365,14 +360,11 @@ def display_export_results():
     total_results = len(docs)
     is_preview = st.session_state.get("is_preview_mode", False)
     
-    st.markdown("---")
-    st.header("📋 Résultats de l'export")
-    
     # Bandeau d'information
     if is_preview:
-        st.info("ℹ️ Mode aperçu - Échantillon limité des données")
+        st.info("Mode aperçu : échantillon limité des données.", icon=":material/info:")
     else:
-        st.success(f"✅ Export complet - {total_results:,} reviews récupérées")
+        st.success(f"Export complet : {format_nombre(total_results)} avis récupérés.", icon=":material/check_circle:")
     
     # Pagination pour l'affichage
     rows_per_page = 100
@@ -382,7 +374,7 @@ def display_export_results():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col1:
-        if st.button("⬅️ Page précédente", disabled=st.session_state.get("current_page", 1) <= 1):
+        if st.button("Page précédente", icon=":material/chevron_left:", disabled=st.session_state.get("current_page", 1) <= 1):
             st.session_state.current_page = max(1, st.session_state.get("current_page", 1) - 1)
             st.rerun()
     
@@ -396,7 +388,7 @@ def display_export_results():
         st.session_state.current_page = current_page
     
     with col3:
-        if st.button("➡️ Page suivante", disabled=st.session_state.get("current_page", 1) >= total_pages):
+        if st.button("Page suivante", icon=":material/chevron_right:", disabled=st.session_state.get("current_page", 1) >= total_pages):
             st.session_state.current_page = min(total_pages, st.session_state.get("current_page", 1) + 1)
             st.rerun()
     
@@ -405,7 +397,7 @@ def display_export_results():
     end_idx = min(start_idx + rows_per_page, total_results)
     page_docs = docs[start_idx:end_idx]
     
-    st.write(f"Affichage des reviews {start_idx + 1} à {end_idx} sur {total_results}")
+    st.caption(f"Avis {start_idx + 1} à {end_idx} sur {format_nombre(total_results)}")
     
     # Créer le DataFrame
     df_page = pd.json_normalize(page_docs)
@@ -422,19 +414,19 @@ def display_download_interface(all_docs, df_page, current_page):
     """Interface de téléchargement des résultats"""
     is_preview = st.session_state.get("is_preview_mode", False)
     
-    st.markdown("### 💾 Téléchargements")
+    st.markdown("#### Téléchargements")
     
     # Avertissement Excel si nécessaire
     display_excel_warning()
     
     # Téléchargement de la page courante
-    st.markdown("#### 📄 Page courante")
+    st.markdown("##### Page courante")
     
     page_filename_base = f"reviews_manuel_page{current_page}"
     display_download_buttons(df_page, page_filename_base, mode="page", page=current_page)
     
     # Téléchargement complet
-    st.markdown("#### 📦 Export complet")
+    st.markdown("##### Export complet")
     
     # Préparer les données complètes
     df_full = pd.json_normalize(all_docs)
@@ -448,9 +440,6 @@ def display_current_configuration_export():
     """Affiche la configuration actuelle pour export"""
     if not st.session_state.get("filters"):
         return
-    
-    st.markdown("---")
-    st.header("💾 Configuration actuelle")
     
     export_config = export_configuration_to_json(
         st.session_state.filters,
@@ -467,62 +456,50 @@ def display_current_configuration_export():
         # Bouton de téléchargement
         config_json = json.dumps(export_config, indent=2)
         st.download_button(
-            "💾 Télécharger config",
+            "Télécharger la configuration",
             config_json,
             file_name="config_export_manuel.json",
-            mime="application/json"
+            mime="application/json",
+            icon=":material/download:"
         )
 
 
 def main():
     """Interface principale du module export manuel"""
     initialize_session_state()
-    
-    st.title("🎯 Module 2 - Export Manuel")
-    st.markdown("Exportez une sélection manuelle de produits avec précision")
-    
+
     # Interface de configuration
-    display_configuration_interface()
-    
+    with section("Configuration d'export", "Collez la configuration créée avec l'Explorateur API."):
+        display_configuration_interface()
+
     # Si configuration chargée
     if st.session_state.get("apply_filters") and st.session_state.get("filters"):
-        # Résumé de la configuration
-        display_configuration_summary()
-        
-        # Interface d'export
-        display_export_interface()
-        
-        # Affichage des résultats
-        display_export_results()
-        
-        # Configuration pour réutilisation
-        display_current_configuration_export()
-    
+        with section("Configuration chargée"):
+            display_configuration_summary()
+
+        with section("Export des avis", "Testez d'abord avec l'aperçu, puis lancez l'export complet."):
+            display_export_interface()
+
+        if st.session_state.get("all_docs"):
+            with section("Résultats de l'export"):
+                display_export_results()
+
+        with section("Configuration actuelle", "Configuration JSON réutilisable dans les autres modules."):
+            display_current_configuration_export()
+
     else:
-        st.markdown("""
-        ## 👋 Bienvenue dans l'Export Manuel
-        
-        Ce module vous permet d'exporter précisément une sélection de produits.
-        
-        ### 🎯 Fonctionnalités :
-        - **Import de configuration** depuis le Module 1 - Explorateur
-        - **Export ciblé** des reviews pour les produits sélectionnés
-        - **Modes aperçu et complet** selon vos besoins
-        - **Formats multiples** : CSV, Excel, Format plat
-        - **Pagination** pour navigation facile des résultats
-        
-        ### 📋 Pour commencer :
-        1. **Chargez une configuration** créée avec le Module 1
-        2. **Vérifiez** les filtres et produits sélectionnés
-        3. **Estimez le volume** total de reviews
-        4. **Lancez l'export** en mode aperçu ou complet
-        5. **Téléchargez** les résultats dans le format souhaité
-        
-        ### 💡 Conseils :
-        - Testez d'abord avec l'aperçu (50 reviews max)
-        - L'export complet peut prendre du temps selon le volume
-        - Les configurations sont réutilisables entre sessions
-        """)
+        with section("Comment utiliser l'Export manuel",
+                     "Exportez précisément les avis d'une sélection de produits."):
+            st.markdown("""
+            1. **Chargez une configuration** créée avec l'Explorateur API
+            2. **Vérifiez** les filtres et produits sélectionnés
+            3. **Estimez le volume** total d'avis
+            4. **Lancez l'export** en mode aperçu ou complet
+            5. **Téléchargez** les résultats : CSV, Excel ou format plat
+
+            Conseils : testez d'abord avec l'aperçu (50 avis au plus) ; l'export complet peut prendre du temps
+            selon le volume ; les configurations sont réutilisables d'une session à l'autre.
+            """)
 
 
 if __name__ == "__main__":

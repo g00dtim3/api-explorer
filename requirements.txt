@@ -1,5 +1,5 @@
 # requirements.txt
-streamlit>=1.28.0
+streamlit>=1.66
 pandas>=2.0.0,<3  # pandas 3 supprime DataFrame.applymap, utilisé par les modules 2 et 3
 requests>=2.31.0
 urllib3>=2.0.0

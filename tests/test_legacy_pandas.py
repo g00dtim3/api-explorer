@@ -31,7 +31,7 @@ def no_network(monkeypatch):
     monkeypatch.setattr(requests, "get", lambda *a, **k: R())
 
 
-@pytest.mark.parametrize("module", ["🚀 Module 3 - Export Bulk", "🎯 Module 2 - Export Manuel"])
+@pytest.mark.parametrize("module", ["Export bulk (V1)", "Export manuel"])
 def test_affichage_des_resultats_legacy(module):
     at = AppTest.from_file(str(REPO / "main_app.py"), default_timeout=60)
     at.secrets["api"] = {"token": "FAKE_token_legacy_123456"}
