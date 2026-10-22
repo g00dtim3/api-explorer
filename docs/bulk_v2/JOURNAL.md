@@ -631,10 +631,16 @@ Référence : `docs/charte/DESIGN_GUIDE.md` et `docs/charte/SPRINT_charte.md`. S
 - Captures avant / après (clair, sombre, 420 px) : `docs/charte/captures_api_explorer/` (fausses données `fake`,
   police de remplacement faute d'accès à Google Fonts).
 
-### Points ouverts (trouvés pendant le sprint, non corrigés : hors périmètre « apparence »)
-- `api_client.py` : en cas d'erreur HTTP, `st.error` affiche l'URL complète, **token compris** (règle n°8).
-- `utils.clean_old_exports` : un bloc copié de `log_export_activity` suit le nettoyage et produit un faux
-  avertissement « Export non enregistré dans le journal ».
+### Corrigés à la suite du sprint (demande de l'utilisateur, commits séparés)
+- **Sécurité (règle n°8)** — `api_client.py` : en cas d'erreur HTTP ou de coupure réseau, l'écran affichait
+  l'adresse de l'appel **token compris**, et la réponse brute. Les messages passent maintenant par `mask()` ; le
+  token est enregistré comme secret à la création du client et n'est plus ajouté au dictionnaire de l'appelant.
+  Test : `tests/test_api_client_secrets.py` (fuite reproduite sur l'ancien code).
+- `utils.clean_old_exports` : le bloc copié de `log_export_activity` est supprimé ; « Nettoyer le journal »
+  n'affiche plus le faux avertissement « Export non enregistré dans le journal ». Test :
+  `tests/test_journal_exports.py`.
+
+### Point ouvert
 - Le module 3 garde ses emojis tant que sa modification n'est pas autorisée.
 
-`pytest` : **318 réussis** (307 + 11 tests de la charte), base Postgres 16 locale comprise.
+`pytest` : **320 réussis** (307 + 11 tests de la charte + 2 tests des corrections), base Postgres 16 locale comprise.

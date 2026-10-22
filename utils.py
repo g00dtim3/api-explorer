@@ -758,34 +758,3 @@ def clean_old_exports(log_path, days_to_keep=30):
     
     except Exception as e:
         st.error(f"Nettoyage impossible : {e}. Réessayez.", icon=":material/error:")
-    """Enregistre l'activité d'export dans un fichier log"""
-    try:
-        log_path = Path("review_exports_log.csv")
-        export_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        log_entry = {
-            "product": export_params.get("product", "BULK_EXPORT" if export_type == "BULK" else ""),
-            "brand": export_params.get("brand", ""),
-            "start_date": export_params.get("start-date"),
-            "end_date": export_params.get("end-date"),
-            "country": export_params.get("country", "Tous"),
-            "rows": export_params.get("rows", 100),
-            "random_seed": export_params.get("random", None),
-            "nb_reviews": nb_reviews,
-            "export_timestamp": export_date,
-            "export_type": export_type
-        }
-        
-        new_log_df = pd.DataFrame([log_entry])
-        
-        if log_path.exists():
-            existing_log_df = pd.read_csv(log_path)
-            log_df = pd.concat([existing_log_df, new_log_df], ignore_index=True)
-        else:
-            log_df = new_log_df
-        
-        log_df.to_csv(log_path, index=False)
-        st.success(f"Export {export_type} enregistré dans le journal.", icon=":material/check_circle:")
-        
-    except Exception as e:
-        st.warning(f"Export non enregistré dans le journal : {str(e)}. Le fichier exporté, lui, est valide.", icon=":material/warning:")
