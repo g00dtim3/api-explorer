@@ -599,3 +599,48 @@ l'utilisateur (`export_id`, nombre de mentions, date).
 - Correctifs : les espaces ou retours à la ligne copiés autour de `supabase_service_key` sont retirés ; ce refus
   affiche maintenant un message qui explique quoi faire (clé `service_role` de « Legacy API Keys », qui commence par `eyJ…`).
 - `pytest` : **307 réussis**.
+
+## Sprint charte — Consumer Voice (22/10/2026)
+
+Référence : `docs/charte/DESIGN_GUIDE.md` et `docs/charte/SPRINT_charte.md`. Seule l'apparence change.
+
+### Fait
+- Kit installé tel quel (v1.0.0, identique à `rddt_connector` et `mvp_verbatim_import`) : `.streamlit/config.toml`,
+  `charte/`, `charte_demo.py`, `tests/test_charte.py` ; guide, aperçus et sprint dans `docs/charte/`.
+  `requirements.txt` : `streamlit>=1.66` (`pandas<3` gardé).
+- `main_app.py` : titre « Collecte Semantiweb », icône Material, `appliquer_charte()` juste après le mot de passe,
+  `bandeau()` à la place du titre, menu sans emoji avec icônes Material. Le routage ne dépend plus du texte des
+  libellés (constantes).
+- Nouvelle entrée **Accueil** (décision de l'utilisateur) : le guide des modules et le parcours recommandé
+  n'étaient jamais affichés (le menu choisissait toujours un module). Contenu mis à jour avec Bulk Export V2.
+- Modules 1 et 2 : plus de `st.title`, contenu rangé en `section()`, emojis remplacés par des icônes Material,
+  chiffres clés en `st.metric(border=True)` au format français, messages d'erreur « ce qui s'est passé + quoi
+  faire ». Les choix qui comparaient un libellé avec emoji (`"🚀 Export en masse" in …`, `startswith("🔍")`)
+  comparent maintenant une constante : même comportement.
+- Module 2 : les lignes de diagnostic de la pagination (« Debug ») sont repliées dans « Détails techniques de la
+  pagination » au lieu de s'afficher au milieu de l'écran.
+- `utils.py` (partagé avec le module 3, décision de l'utilisateur) : emojis retirés des messages, des boutons de
+  téléchargement et du journal des exports ; nouveau `format_nombre()` (189 824).
+- Bulk Export V2 : onglets en français (« Nouvel export », « Suivi », « Téléchargements », « Historique »,
+  décision de l'utilisateur) dans un `st.segmented_control` ; étapes Configurer → Estimer → Lancer ; statuts en
+  badge (`badge_statut`) et en français dans les listes (`libelle_statut`) ; une seule action principale visible
+  (Arrêter, Valider ou Reprendre) ; limite de la version 1 dans un encadré « à retenir » ; « Brut en base
+  (raw_mentions) » devient « Mentions brutes conservées en base ».
+- Le module 3 (`module3_bulk_export.py`) n'est **pas modifié** : il garde son titre et ses emojis ; le thème
+  s'y applique seul. Il n'a pas de bandeau, pour éviter un double titre.
+- Captures avant / après (clair, sombre, 420 px) : `docs/charte/captures_api_explorer/` (fausses données `fake`,
+  police de remplacement faute d'accès à Google Fonts).
+
+### Corrigés à la suite du sprint (demande de l'utilisateur, commits séparés)
+- **Sécurité (règle n°8)** — `api_client.py` : en cas d'erreur HTTP ou de coupure réseau, l'écran affichait
+  l'adresse de l'appel **token compris**, et la réponse brute. Les messages passent maintenant par `mask()` ; le
+  token est enregistré comme secret à la création du client et n'est plus ajouté au dictionnaire de l'appelant.
+  Test : `tests/test_api_client_secrets.py` (fuite reproduite sur l'ancien code).
+- `utils.clean_old_exports` : le bloc copié de `log_export_activity` est supprimé ; « Nettoyer le journal »
+  n'affiche plus le faux avertissement « Export non enregistré dans le journal ». Test :
+  `tests/test_journal_exports.py`.
+
+### Point ouvert
+- Le module 3 garde ses emojis tant que sa modification n'est pas autorisée.
+
+`pytest` : **320 réussis** (307 + 11 tests de la charte + 2 tests des corrections), base Postgres 16 locale comprise.

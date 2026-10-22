@@ -12,36 +12,41 @@ from utils import (
     build_filter_params, 
     load_configuration_from_json, 
     export_configuration_to_json,
-    display_quotas
+    format_nombre
 )
+from charte import encadre_cle, section
+
+# Choix de la stratégie de traitement (libellés affichés ET valeurs comparées dans le code)
+STRATEGIE_PRECISE = "Sélection précise de produits (recommandé pour analyses ciblées)"
+STRATEGIE_MASSE = "Export en masse par marque (recommandé pour beaucoup de produits)"
 
 
 def display_filter_interface():
     """Affiche l'interface de filtrage dans la sidebar"""
     with st.sidebar:
-        st.header("🔍 Filtres d'exploration")
+        st.header("Filtres d'exploration", anchor=False)
         
         # Section import de configuration
-        st.markdown("### 📎 Charger une configuration")
+        st.markdown("### Charger une configuration")
         json_input = st.text_area(
-            "📥 Collez ici vos paramètres (JSON)", 
+            "Collez ici vos paramètres (JSON)", 
             height=150,
             help="Collez une configuration JSON précédemment exportée"
         )
         
-        if st.button("🔄 Charger la configuration"):
+        if st.button("Charger la configuration", icon=":material/upload_file:"):
             if load_configuration_from_json(json_input):
                 st.rerun()
         
         st.markdown("---")
         
         # Filtres de base
-        st.markdown("### 📅 Période")
+        st.markdown("### Période")
         start_date = st.date_input("Date de début", value=datetime.date(2022, 1, 1))
         end_date = st.date_input("Date de fin", value=datetime.date.today())
         
         # Catégories
-        st.markdown("### 🏷️ Catégories")
+        st.markdown("### Catégories")
         categories_data = api_client.get_categories()
         all_categories = ["ALL"] + [c["category"] for c in categories_data.get("categories", [])]
         category = st.selectbox("Catégorie", all_categories)
@@ -55,12 +60,12 @@ def display_filter_interface():
         subcategory = st.selectbox("Sous-catégorie", subcategory_options)
         
         # Marques
-        st.markdown("### 🏢 Marques")
+        st.markdown("### Marques")
         brands_data = api_client.get_brands(category, subcategory)
         brand = st.multiselect("Marques", brands_data.get("brands", []))
         
         # Géographie
-        st.markdown("### 🌍 Géographie")
+        st.markdown("### Géographie")
         countries_data = api_client.get_countries()
         all_countries = ["ALL"] + countries_data.get("countries", [])
         country = st.multiselect("Pays", all_countries)
@@ -77,7 +82,7 @@ def display_filter_interface():
         market = st.multiselect("Markets", all_markets)
         
         # Attributs
-        st.markdown("### 🏷️ Attributs")
+        st.markdown("### Attributs")
         attribute_data = api_client.get_attributes(category, subcategory, brand)
         attribute_options = attribute_data.get("attributes", [])
         attributes = st.multiselect("Attributs", attribute_options)
@@ -85,7 +90,7 @@ def display_filter_interface():
         attributes_negative = st.multiselect("Attributs négatifs", attribute_options)
         
         # Bouton d'application
-        if st.button("✅ Appliquer les filtres", type="primary"):
+        if st.button("Appliquer les filtres", type="primary", icon=":material/filter_alt:"):
             st.session_state.apply_filters = True
             st.session_state.filters = {
                 "start_date": start_date,
@@ -110,21 +115,19 @@ def display_filter_interface():
 def display_filter_summary():
     """Affiche le résumé des filtres appliqués"""
     filters = st.session_state.filters
-    st.markdown("## 📋 Filtres appliqués")
-    
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown(f"**📅 Période :** `{filters['start_date']}` → `{filters['end_date']}`")
-        st.markdown(f"**🏷️ Catégorie :** `{filters['category']}`")
-        st.markdown(f"**🏷️ Sous-catégorie :** `{filters['subcategory']}`")
-        st.markdown(f"**🏢 Marques :** `{', '.join(filters['brand']) if filters['brand'] else 'Toutes'}`")
+        st.markdown(f"**Période :** `{filters['start_date']}` → `{filters['end_date']}`")
+        st.markdown(f"**Catégorie :** `{filters['category']}`")
+        st.markdown(f"**Sous-catégorie :** `{filters['subcategory']}`")
+        st.markdown(f"**Marques :** `{', '.join(filters['brand']) if filters['brand'] else 'Toutes'}`")
     
     with col2:
-        st.markdown(f"**🌍 Pays :** `{', '.join(filters['country']) if filters['country'] and 'ALL' not in filters['country'] else 'Tous'}`")
-        st.markdown(f"**📡 Sources :** `{', '.join(filters['source']) if filters['source'] and 'ALL' not in filters['source'] else 'Toutes'}`")
-        st.markdown(f"**🏪 Markets :** `{', '.join(filters['market']) if filters['market'] and 'ALL' not in filters['market'] else 'Tous'}`")
-        st.markdown(f"**🏷️ Attributs :** `{', '.join(filters['attributes']) if filters['attributes'] else 'Aucun'}`")
+        st.markdown(f"**Pays :** `{', '.join(filters['country']) if filters['country'] and 'ALL' not in filters['country'] else 'Tous'}`")
+        st.markdown(f"**Sources :** `{', '.join(filters['source']) if filters['source'] and 'ALL' not in filters['source'] else 'Toutes'}`")
+        st.markdown(f"**Markets :** `{', '.join(filters['market']) if filters['market'] and 'ALL' not in filters['market'] else 'Tous'}`")
+        st.markdown(f"**Attributs :** `{', '.join(filters['attributes']) if filters['attributes'] else 'Aucun'}`")
 
 
 def load_products_data():
@@ -132,10 +135,10 @@ def load_products_data():
     filters = st.session_state.filters
     
     if not filters.get("brand"):
-        st.error("❌ Aucune marque sélectionnée")
+        st.error("Aucune marque sélectionnée : choisissez au moins une marque dans les filtres, puis appliquez-les.", icon=":material/error:")
         return
     
-    with st.spinner("🔄 Chargement des produits..."):
+    with st.spinner("Chargement des produits…"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         product_data = []
@@ -174,21 +177,21 @@ def load_products_data():
         st.session_state.product_data_cache = product_data
         st.session_state.product_list_loaded = True
         st.session_state.reviews_counts_loaded = False
-        st.success(f"✅ {len(product_data)} produits chargés")
+        st.success(f"{format_nombre(len(product_data))} produits chargés.", icon=":material/check_circle:")
     else:
-        st.error("❌ Aucun produit trouvé")
+        st.error("Aucun produit trouvé pour ces filtres : élargissez la période ou les marques.", icon=":material/error:")
 
 
 def load_reviews_counts():
     """Charge les compteurs d'avis pour les produits"""
     if not st.session_state.product_data_cache:
-        st.error("❌ Liste des produits non chargée")
+        st.error("Liste des produits non chargée : chargez-la d'abord (étape 1).", icon=":material/error:")
         return
     
     filters = st.session_state.filters
     filter_params = build_filter_params(filters)
     
-    with st.spinner("📊 Chargement des compteurs d'avis..."):
+    with st.spinner("Chargement des compteurs d'avis…"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         errors_count = 0
@@ -225,17 +228,15 @@ def load_reviews_counts():
         status_text.empty()
         
         if errors_count > 0:
-            st.warning(f"⚠️ {errors_count} erreurs lors du chargement des compteurs")
+            st.warning(f"{errors_count} erreurs lors du chargement des compteurs : certains produits n'ont pas de nombre d'avis.", icon=":material/warning:")
         else:
-            st.success(f"✅ Compteurs chargés pour {len(st.session_state.product_data_cache)} produits")
+            st.success(f"Compteurs chargés pour {format_nombre(len(st.session_state.product_data_cache))} produits.", icon=":material/check_circle:")
         
         st.session_state.reviews_counts_loaded = True
 
 
 def display_products_interface():
     """Affiche l'interface de gestion des produits"""
-    st.header("📦 Gestion des produits")
-    
     # Affichage de l'estimation des volumes avant de choisir la stratégie
     display_volume_strategy_selector()
     
@@ -243,34 +244,34 @@ def display_products_interface():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 📦 Étape 1: Liste des produits")
+        st.markdown("#### Étape 1 : liste des produits")
         if not st.session_state.product_list_loaded:
-            if st.button("📦 Charger la liste des produits", key="load_products"):
+            if st.button("Charger la liste des produits", key="load_products", type="primary", icon=":material/inventory_2:"):
                 load_products_data()
         else:
-            st.success(f"✅ {len(st.session_state.product_data_cache)} produits chargés")
-            if st.button("🔄 Recharger liste", key="reload_products"):
+            st.success(f"{format_nombre(len(st.session_state.product_data_cache))} produits chargés.", icon=":material/check_circle:")
+            if st.button("Recharger la liste", key="reload_products", icon=":material/refresh:"):
                 st.session_state.product_list_loaded = False
                 st.session_state.reviews_counts_loaded = False
                 st.session_state.product_data_cache = []
                 st.rerun()
     
     with col2:
-        st.markdown("### 📊 Étape 2: Compteurs d'avis (optionnel)")
+        st.markdown("#### Étape 2 : compteurs d'avis (facultatif)")
         if st.session_state.product_list_loaded:
             if not st.session_state.reviews_counts_loaded:
-                if st.button("📊 Charger les compteurs", key="load_counts"):
+                if st.button("Charger les compteurs", key="load_counts", icon=":material/tag:"):
                     load_reviews_counts()
             else:
-                st.success("✅ Compteurs chargés")
-                if st.button("🔄 Recharger compteurs", key="reload_counts"):
+                st.success("Compteurs chargés.", icon=":material/check_circle:")
+                if st.button("Recharger les compteurs", key="reload_counts", icon=":material/refresh:"):
                     load_reviews_counts()
         else:
-            st.info("Chargez d'abord la liste des produits")
+            st.info("Chargez d'abord la liste des produits.", icon=":material/info:")
     
     # Affichage et sélection des produits
     if st.session_state.product_list_loaded and st.session_state.product_data_cache:
-        st.markdown("### 🎯 Étape 3: Sélection des produits")
+        st.markdown("#### Étape 3 : sélection des produits")
         display_product_selection()
 
 
@@ -279,19 +280,15 @@ def display_volume_strategy_selector():
     filters = st.session_state.filters
     
     if not filters.get("brand"):
-        st.warning("⚠️ Aucune marque sélectionnée")
+        st.warning("Aucune marque sélectionnée : choisissez au moins une marque dans les filtres.", icon=":material/warning:")
         return
     
-    st.markdown("---")
-    st.markdown("### 🎯 Stratégie de traitement")
+    st.markdown("#### Stratégie de traitement")
     
     # Sélecteur de stratégie
     export_strategy = st.radio(
         "Choisissez votre approche",
-        [
-            "🎯 Sélection précise de produits (recommandé pour analyses ciblées)",
-            "🚀 Export en masse par marque (recommandé pour beaucoup de produits)"
-        ],
+        [STRATEGIE_PRECISE, STRATEGIE_MASSE],
         key="export_strategy_choice",
         help="Choisissez dès maintenant pour optimiser le chargement des données"
     )
@@ -299,15 +296,15 @@ def display_volume_strategy_selector():
     st.session_state.export_strategy = export_strategy
     
     # Affichage d'informations selon la stratégie
-    if "🚀 Export en masse" in export_strategy:
-        st.success("⚡ Mode rapide sélectionné : Pas de chargement de liste de produits")
-        st.info(f"Exportera toutes les reviews pour : {', '.join(filters['brand'])}")
+    if export_strategy == STRATEGIE_MASSE:
+        st.success("Mode rapide : pas de chargement de la liste des produits.", icon=":material/bolt:")
+        st.info(f"Tous les avis seront exportés pour : {', '.join(filters['brand'])}", icon=":material/info:")
         
         # Estimation du volume total en mode bulk
         display_bulk_volume_preview()
         
     else:
-        st.info("🔍 Mode précis sélectionné : La liste des produits va être chargée")
+        st.info("Mode précis : la liste des produits va être chargée.", icon=":material/info:")
         
         # Estimation du nombre de produits à charger
         display_products_estimation()
@@ -317,7 +314,7 @@ def display_bulk_volume_preview():
     """Affiche un aperçu du volume en mode bulk"""
     filters = st.session_state.filters
     
-    if st.button("📊 Estimer le volume total (mode bulk)", key="estimate_bulk_preview"):
+    if st.button("Estimer le volume total", key="estimate_bulk_preview", type="primary", icon=":material/calculate:"):
         with st.spinner("Estimation du volume bulk..."):
             try:
                 # Paramètres pour toutes les marques en une fois
@@ -330,22 +327,22 @@ def display_bulk_volume_preview():
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("📊 Volume total estimé", f"{total_reviews:,} reviews")
+                        st.metric("Volume total estimé", f"{format_nombre(total_reviews)} avis", border=True)
                     with col2:
-                        st.metric("🏢 Marques", len(filters["brand"]))
+                        st.metric("Marques", len(filters["brand"]), border=True)
                     with col3:
                         avg_per_brand = total_reviews / len(filters["brand"]) if filters["brand"] else 0
-                        st.metric("📈 Moyenne par marque", f"{avg_per_brand:.0f} reviews")
+                        st.metric("Moyenne par marque", f"{format_nombre(round(avg_per_brand))} avis", border=True)
                     
                     if total_reviews > 10000:
-                        st.success("✅ Volume important - Le mode bulk est idéal pour ce cas")
+                        st.success("Volume important : l'export en masse est le plus adapté.", icon=":material/check_circle:")
                     else:
-                        st.info("💡 Volume modéré - Les deux modes sont viables")
+                        st.info("Volume modéré : les deux modes conviennent.", icon=":material/info:")
                         
                 else:
-                    st.error("❌ Impossible d'obtenir les métriques")
+                    st.error("Volume indisponible : l'API n'a pas renvoyé de métriques. Réessayez dans un instant.", icon=":material/error:")
             except Exception as e:
-                st.error(f"❌ Erreur lors du calcul : {e}")
+                st.error(f"Calcul impossible : {e}. Réessayez dans un instant.", icon=":material/error:")
 
 
 def display_products_estimation():
@@ -380,16 +377,16 @@ def display_products_estimation():
         total_products_estimate = int(avg_products_per_brand * len(filters["brand"]))
     
     if total_products_estimate > 500:
-        st.warning(f"⚠️ Estimation : ~{total_products_estimate} produits à charger. Cela peut prendre du temps et consommer du quota API.")
+        st.warning(f"Estimation : environ {format_nombre(total_products_estimate)} produits à charger. Cela peut prendre du temps et consommer du quota API.", icon=":material/warning:")
         
         # Estimation du nombre de reviews pour comparaison
         display_reviews_comparison()
         
-        if st.button("🔄 Changer pour l'export en masse", key="switch_to_bulk"):
-            st.session_state.export_strategy = "🚀 Export en masse par marque (recommandé pour beaucoup de produits)"
+        if st.button("Passer à l'export en masse", key="switch_to_bulk", icon=":material/swap_horiz:"):
+            st.session_state.export_strategy = STRATEGIE_MASSE
             st.rerun()
     else:
-        st.success(f"✅ Estimation : ~{total_products_estimate} produits à charger")
+        st.success(f"Estimation : environ {format_nombre(total_products_estimate)} produits à charger.", icon=":material/check_circle:")
 
 
 def display_reviews_comparison():
@@ -406,12 +403,12 @@ def display_reviews_comparison():
             if total_reviews > 0:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("💡 Volume total de reviews", f"{total_reviews:,}")
+                    st.metric("Volume total d'avis", format_nombre(total_reviews), border=True)
                 with col2:
-                    st.metric("📦 Produits estimés", f"~{st.session_state.get('products_estimate', '?')}")
+                    st.metric("Produits estimés", f"~{st.session_state.get('products_estimate', '?')}", border=True)
                 
                 if total_reviews > 5000:
-                    st.info("💭 Avec ce volume, l'export en masse pourrait être plus efficace")
+                    st.info("Avec ce volume, l'export en masse pourrait être plus efficace.", icon=":material/info:")
             
         except Exception as e:
             st.warning(f"Erreur estimation reviews: {e}")
@@ -429,7 +426,7 @@ def display_product_selection():
     df_products = pd.DataFrame(product_data)
     
     # Interface de recherche
-    search_text = st.text_input("🔍 Filtrer les produits", key="product_search")
+    search_text = st.text_input("Filtrer les produits", key="product_search", placeholder="Nom du produit ou de la marque")
     
     # Filtrer selon la recherche
     if search_text:
@@ -476,13 +473,13 @@ def display_product_selection():
             filtered_df = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
     
     # Interface de sélection
-    st.write(f"**{len(filtered_df)} produits** | Tri: {sort_column} ({'⬆️' if sort_ascending else '⬇️'})")
+    st.write(f"**{len(filtered_df)} produits** | Tri: {sort_column} ({'croissant' if sort_ascending else 'décroissant'})")
     
     # Sélection groupée
     col_sel_all, col_deselect_all, col_stats = st.columns([2, 2, 3])
     
     with col_sel_all:
-        if st.button("✅ Tout sélectionner (page)", key="select_all_visible"):
+        if st.button("Tout sélectionner (page)", key="select_all_visible", icon=":material/select_all:"):
             visible_products = list(filtered_df["Produit"].values)
             for pid in visible_products:
                 if pid not in st.session_state.selected_product_ids:
@@ -490,7 +487,7 @@ def display_product_selection():
             st.rerun()
     
     with col_deselect_all:
-        if st.button("❌ Tout désélectionner", key="deselect_all"):
+        if st.button("Tout désélectionner", key="deselect_all", icon=":material/deselect:"):
             st.session_state.selected_product_ids = []
             st.rerun()
     
@@ -504,7 +501,7 @@ def display_product_selection():
     # En-têtes
     header_col1, header_col2, header_col3, header_col4 = st.columns([0.5, 2, 3, 1])
     with header_col1:
-        st.write("**☑️**")
+        st.write("**Choix**")
     with header_col2:
         st.write("**Marque**")
     with header_col3:
@@ -548,13 +545,10 @@ def display_volume_estimation():
     if not st.session_state.selected_product_ids:
         return
     
-    st.markdown("---")
-    st.header("📊 Volume total de la sélection")
-    
     filters = st.session_state.filters
     
     # Estimation par produits sélectionnés
-    if st.button("📈 Calculer le volume total", key="calculate_volume"):
+    if st.button("Calculer le volume total", key="calculate_volume", type="primary", icon=":material/calculate:"):
         with st.spinner("Calcul du volume total..."):
             total_reviews = 0
             details = []
@@ -593,8 +587,8 @@ def display_volume_estimation():
                 col1, col2 = st.columns([1, 2])
                 
                 with col1:
-                    st.metric("📊 Volume total", f"{total_reviews:,} reviews")
-                    st.metric("📦 Produits sélectionnés", len(details))
+                    st.metric("Volume total", f"{format_nombre(total_reviews)} avis", border=True)
+                    st.metric("Produits sélectionnés", len(details), border=True)
                 
                 with col2:
                     # Tableau détaillé
@@ -608,9 +602,6 @@ def display_export_configuration():
     if not st.session_state.get("filters"):
         return
     
-    st.markdown("---")
-    st.header("💾 Configuration réutilisable")
-    
     # Inclure la stratégie choisie dans la configuration
     export_config = export_configuration_to_json(
         st.session_state.filters,
@@ -619,7 +610,7 @@ def display_export_configuration():
     
     # Ajouter des métadonnées sur la stratégie
     strategy = st.session_state.get("export_strategy", "")
-    if "🚀 Export en masse" in strategy:
+    if strategy == STRATEGIE_MASSE:
         export_config["export_mode"] = "BULK_BY_BRAND"
         export_config["note"] = "Configuration optimisée pour export en masse"
     else:
@@ -636,70 +627,60 @@ def display_export_configuration():
         # Bouton de téléchargement
         config_json = json.dumps(export_config, indent=2)
         st.download_button(
-            "💾 Télécharger la configuration",
+            "Télécharger la configuration",
             config_json,
             file_name="configuration_export.json",
-            mime="application/json"
+            mime="application/json",
+            icon=":material/download:"
         )
         
         # Recommandation de module
         strategy = st.session_state.get("export_strategy", "")
-        if "🚀 Export en masse" in strategy:
-            st.success("**Recommandation :**\n\nUtilisez le **Module 3 - Export Bulk** pour cette configuration")
+        if strategy == STRATEGIE_MASSE:
+            encadre_cle("Utilisez l'Export bulk (V1) pour cette configuration.", titre="Recommandation")
         else:
-            st.info("**Recommandation :**\n\nUtilisez le **Module 2 - Export Manuel** pour cette configuration")
+            encadre_cle("Utilisez l'Export manuel pour cette configuration.", titre="Recommandation")
 
 
 def main():
     """Interface principale du module explorateur"""
     initialize_session_state()
-    
-    st.title("🔍 Module 1 - Explorateur API")
-    st.markdown("Explorez le contenu de l'API pour préparer votre sélection de produits")
-    
-    # Affichage des quotas
-    with st.expander("📊 Quotas API", expanded=False):
-        display_quotas()
-    
+
     # Interface de filtrage
     display_filter_interface()
-    
+
     # Interface principale
     if st.session_state.get("apply_filters") and st.session_state.get("filters"):
-        # Résumé des filtres
-        display_filter_summary()
-        
-        # Gestion des produits
-        st.markdown("---")
-        display_products_interface()
-        
+        with section("Filtres appliqués"):
+            display_filter_summary()
+
+        with section("Produits", "Choisissez la stratégie, puis chargez et sélectionnez les produits."):
+            display_products_interface()
+
         # Estimation du volume
-        if st.session_state.selected_product_ids and st.session_state.get("export_strategy", "").startswith("🎯"):
-            display_volume_estimation()
-        
-        # Configuration d'export
-        display_export_configuration()
-        
+        if st.session_state.selected_product_ids and st.session_state.get("export_strategy") == STRATEGIE_PRECISE:
+            with section("Volume total de la sélection"):
+                display_volume_estimation()
+
+        with section("Configuration réutilisable",
+                     "À copier ou télécharger, puis à importer dans un module d'export."):
+            display_export_configuration()
+
     else:
-        st.markdown("""
-        ## 👋 Bienvenue dans l'Explorateur API
-        
-        Ce module vous permet d'explorer le contenu de l'API pour préparer votre sélection :
-        
-        ### 🔍 Étapes d'utilisation :
-        1. **Configurez vos filtres** dans la barre latérale
-        2. **Appliquez les filtres** pour voir les options disponibles
-        3. **Chargez la liste des produits** correspondant à vos critères
-        4. **Optionnel :** Chargez les compteurs d'avis pour chaque produit
-        5. **Sélectionnez les produits** qui vous intéressent un par un
-        6. **Estimez le volume total** de votre sélection
-        7. **Exportez la configuration** pour l'utiliser dans les modules d'export
-        
-        ### 💡 Conseils :
-        - Commencez par des filtres larges puis affinez
-        - Le chargement des compteurs peut prendre du temps pour beaucoup de produits
-        - Sauvegardez votre configuration pour la réutiliser
-        """)
+        with section("Comment utiliser l'Explorateur API",
+                     "Configurez vos filtres dans la barre latérale, puis cliquez sur « Appliquer les filtres »."):
+            st.markdown("""
+            1. **Configurez vos filtres** dans la barre latérale
+            2. **Appliquez les filtres** pour voir les options disponibles
+            3. **Chargez la liste des produits** correspondant à vos critères
+            4. **Facultatif :** chargez les compteurs d'avis pour chaque produit
+            5. **Sélectionnez les produits** qui vous intéressent un par un
+            6. **Estimez le volume total** de votre sélection
+            7. **Exportez la configuration** pour l'utiliser dans les modules d'export
+
+            Conseils : commencez par des filtres larges puis affinez ; le chargement des compteurs peut prendre
+            du temps pour beaucoup de produits ; sauvegardez votre configuration pour la réutiliser.
+            """)
 
 
 if __name__ == "__main__":

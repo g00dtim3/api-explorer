@@ -79,3 +79,11 @@ PENDING → RUNNING → (STOPPING → PAUSED) | FAILED | INCOMPLETE → VALIDATI
 - **Lien Compass** : `compass_id` doit rester identique, au caractère près, à l'`id` calculé par
   `compass_import/core/hasher.py` (dépôt `mvp_verbatim_import`). Toute modification de l'une des deux
   méthodes se fait des deux côtés, avec le test commun (fixture `fake_export_plat`).
+
+## Design (charte Consumer Voice, 22/10/2026)
+L'interface suit la **charte Consumer Voice**, commune à `api-explorer`, `mvp_verbatim_import` et `rddt_connector`.
+Avant toute modification d'interface, lire `docs/charte/DESIGN_GUIDE.md`.
+- Thème : `.streamlit/config.toml` ; composants : `charte/` ; tests : `tests/test_charte.py`.
+- Ne jamais modifier le kit (`charte/`, `config.toml`) dans cette seule application : il se modifie dans le kit
+  commun puis se recopie dans les trois dépôts.
+- `module3_bulk_export.py` reste inchangé (règle n°1) : pas de bandeau, il garde son propre titre.
