@@ -3,7 +3,8 @@ bulk_export/derived.py
 ──────────────────────────────────────────────────────────────
 Formats DÉRIVÉS, fabriqués en flux à partir des mentions en base (la référence brute reste le JSONL) :
 
-- ``export_complete.xlsx`` : mêmes colonnes et mêmes valeurs que le CSV complet, une feuille « Data ».
+- ``export_complete.xlsx`` : AU FORMAT PLAT (mêmes colonnes, même ordre, mêmes valeurs que ``export_plat.csv``),
+  une feuille « Data » (demande du 26/11/2026).
   Deux limites d'Excel, traitées DANS L'EXCEL SEULEMENT et comptées dans le manifeste :
   une cellule de plus de 32 767 caractères est coupée ; les caractères de contrôle interdits sont retirés.
   Un texte qui commence par « = » reste du texte (jamais une formule).
@@ -61,11 +62,28 @@ def _excel_value(value: Any, stats: ExcelStats) -> Any:
     return cleaned
 
 
-def write_excel(mentions_factory: Callable[[], Iterator[tuple]], dest: Path, header: list[str],
-                expected_rows: int) -> ExcelStats:
-    """Écriture en flux (mode « écriture seule » d'openpyxl). ``header`` = colonnes du CSV complet."""
+def _python_value(value: Any) -> Any:
+    """Valeur d'une cellule de DataFrame → valeur Python (vide pour NaN)."""
+    import pandas as pd
+
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value.item() if hasattr(value, "item") else value
+
+
+def write_excel(mentions_factory: Callable[[], Iterator[tuple]], dest: Path, expected_rows: int,
+                chunk: int = PLAT_CHUNK) -> ExcelStats:
+    """Excel au FORMAT PLAT (mêmes colonnes, même ordre et mêmes valeurs que ``export_plat.csv``),
+    écrit en flux par paquets (mode « écriture seule » d'openpyxl)."""
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
+
+    from utils import PLAT_COLUMNS
 
     if expected_rows + 1 > EXCEL_MAX_ROWS:
         raise ExcelTooLarge(f"{expected_rows} mentions : au-delà de la limite d'une feuille Excel "
@@ -73,19 +91,19 @@ def write_excel(mentions_factory: Callable[[], Iterator[tuple]], dest: Path, hea
     stats = ExcelStats()
     wb = Workbook(write_only=True)
     ws = wb.create_sheet("Data")
-    ws.append(header)
-    for _, _, raw_json in mentions_factory():
-        record = json.loads(raw_json)
-        row = []
-        for col in header:
-            value = _excel_value(record.get(col), stats)
-            if isinstance(value, str) and value.startswith("="):
-                cell = WriteOnlyCell(ws, value=value)
-                cell.data_type = "s"  # texte, jamais une formule
-                value = cell
-            row.append(value)
-        ws.append(row)
-        stats.rows += 1
+    ws.append(PLAT_COLUMNS)
+    for flat in plat_chunks(mentions_factory, chunk):
+        for values in flat.itertuples(index=False, name=None):
+            row = []
+            for raw in values:
+                value = _excel_value(_python_value(raw), stats)
+                if isinstance(value, str) and value.startswith("="):
+                    cell = WriteOnlyCell(ws, value=value)
+                    cell.data_type = "s"  # texte, jamais une formule
+                    value = cell
+                row.append(value)
+            ws.append(row)
+            stats.rows += 1
     wb.save(dest)
     return stats
 
@@ -153,32 +171,32 @@ def _harmonize(df, columns: list[str], kinds: dict[str, set]):
     return df
 
 
-def write_plat(mentions_factory: Callable[[], Iterator[tuple]], dest: Path, chunk: int = PLAT_CHUNK) -> int:
-    """Format plat existant (``utils.postprocess_reviews``), par paquets. Renvoie le nombre de lignes écrites."""
+def plat_chunks(mentions_factory: Callable[[], Iterator[tuple]], chunk: int = PLAT_CHUNK):
+    """Les mentions au format plat (``utils.postprocess_reviews``), par paquets de ``chunk`` mentions, avec les
+    colonnes et les types qu'aurait donnés le traitement de toutes les mentions d'un coup."""
     import pandas as pd
 
     from utils import postprocess_reviews  # fonction existante, réutilisée telle quelle
 
     columns, kinds = _profile(mentions_factory)
-    rows, first = 0, True
     buffer: list[dict] = []
+    for _, _, raw_json in mentions_factory():
+        buffer.append(json.loads(raw_json))
+        if len(buffer) >= chunk:
+            yield postprocess_reviews(_harmonize(_str_lists(pd.json_normalize(buffer)), columns, kinds).copy())
+            buffer = []
+    if buffer:
+        yield postprocess_reviews(_harmonize(_str_lists(pd.json_normalize(buffer)), columns, kinds).copy())
+
+
+def write_plat(mentions_factory: Callable[[], Iterator[tuple]], dest: Path, chunk: int = PLAT_CHUNK) -> int:
+    """Fichier plat (« ; », UTF-8 avec BOM), par paquets. Renvoie le nombre de lignes écrites."""
+    rows, first = 0, True
     with open(dest, "w", encoding=CSV_ENCODING, newline="") as fh:
-        def flush() -> None:
-            nonlocal rows, first
-            if not buffer:
-                return
-            df = _harmonize(_str_lists(pd.json_normalize(buffer)), columns, kinds)
-            flat = postprocess_reviews(df.copy())
+        for flat in plat_chunks(mentions_factory, chunk):
             fh.write(flat.to_csv(index=False, sep=";", header=first))
             first = False
             rows += len(flat)
-            buffer.clear()
-
-        for _, _, raw_json in mentions_factory():
-            buffer.append(json.loads(raw_json))
-            if len(buffer) >= chunk:
-                flush()
-        flush()
     return rows
 
 

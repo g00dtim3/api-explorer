@@ -652,3 +652,34 @@ Noms affichés alignés sur l'usage de chaque page :
 Seuls les libellés à l'écran changent : les fichiers, le paquet `bulk_export`, le schéma `bulk_export` et la
 documentation gardent le nom « Bulk Export V2 ». Le module 3 étant non modifiable, son propre titre
 (« Module 3 - Export Bulk ») ne change pas.
+
+---
+
+## Colonnes et ordre des fichiers Excel et plat (26/11/2026)
+
+### Demande
+L'Excel et le fichier plat doivent contenir **exactement** ces colonnes, dans cet ordre :
+guid · brand · country · date · opinion · product_name_SEMANTIWEB · rating · source · verbatim_content · sampling ·
+attribute_Efficiency · attribute_Packaging · attribute_Price · attribute_Quality · attribute_Scent · attribute_Taste ·
+attribute_Texture · attribute_Safety · attribute_Composition · categorie interne · sous categorie interne · photo
+
+### Fait
+| Fichier | Changement |
+|---|---|
+| `utils.py` | `PLAT_COLUMNS` (la liste ci-dessus). `postprocess_reviews` renvoie exactement ces colonnes, dans cet ordre : `Sampling` devient `sampling` ; `categories`, `subcategory`, `business indicator` et `safety` sont retirées (le calcul de `safety`, devenu inutile, est supprimé) ; `categorie interne`, `sous categorie interne` et `photo` sont créées **vides** (l'API ne les fournit pas, aucune valeur inventée). Le bouton **Excel** des modules 2 et 3 passe au format plat ; le bouton CSV reste brut. |
+| `bulk_export/derived.py` | L'Excel de Bulk Export V2 est désormais **au format plat** (mêmes colonnes et mêmes valeurs que `export_plat.csv`), fabriqué par paquets comme le fichier plat (`plat_chunks`). |
+| `bulk_export/downloads.py` | Appel de l'Excel adapté (il ne dépend plus des colonnes du CSV). |
+| `tests/test_derived.py` | Colonnes exactes et dans l'ordre ; Excel identique au fichier plat ; boutons des modules 2 et 3 (Excel et plat au nouveau format, CSV inchangé). |
+
+### Décisions
+- **Le CSV complet reste brut** (colonnes de l'API), dans Bulk Export V2 comme dans les modules 2 et 3 : il sert de
+  référence lisible et de contrôle de conservation à la validation.
+- `module3_bulk_export.py` n'est pas modifié (règle n°1) : ses boutons passent par `utils.py`.
+- Les valeurs ne changent pas : date au 1er du mois, `attribute_*` (positive / negative / neutre / 0), `sampling` (0/1).
+- Exports déjà validés : fichiers inchangés ; les relancer pour obtenir le nouveau format.
+
+### Vérifications
+- **Compass** : un fichier plat de Bulk Export V2 est lu par le vrai code d'import Compass (`parse_csv` +
+  `normalize_batch`, dépôt `mvp_verbatim_import`) : colonnes acceptées, 0 rejet, `compass_id` identique au caractère
+  près, catégories et photo vides. Auparavant, Compass refusait le fichier à cause de `Sampling`.
+- `pytest` : **322 réussis** avec la base de test.

@@ -87,6 +87,9 @@ Points vérifiés au sprint 1 (15/10/2026), en faisant passer de fausses mention
   l'application, éventuellement retouché à la main, ou d'un autre export Semantiweb ? Si ce fichier contient la
   **date au jour**, `compass_id` devrait utiliser le jour et non le 1er du mois. C'est un réglage à changer, pas du
   code à réécrire, mais il faut le savoir avant de relier les deux projets.
+  ✅ **Réglé le 26/11/2026** : `postprocess_reviews()` produit désormais `sampling` en minuscules, dans l'ordre des
+  colonnes attendu par Compass. Un fichier plat de Bulk Export V2 est accepté tel quel par l'import Compass
+  (vérifié avec son code : 0 rejet, `compass_id` identique).
 
 Toujours à vérifier sur une vraie réponse : le nom réel du champ verbatim (`verbatim content` ou `content trad`).
 Les deux champs utilisés sont **réglables** (`verbatim_field`, `compass_verbatim_field`), figés dans la configuration

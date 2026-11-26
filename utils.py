@@ -269,8 +269,20 @@ def export_configuration_to_json(filters, selected_products=None):
     return export_config
 
 
+# Colonnes du format plat (fichier plat et Excel), dans cet ordre : demande du 26/11/2026.
+# C'est aussi le format attendu par l'import Compass. Les trois dernières colonnes ne viennent pas de l'API :
+# elles sont créées vides, à remplir ensuite (aucune valeur inventée).
+PLAT_COLUMNS = [
+    'guid', 'brand', 'country', 'date', 'opinion', 'product_name_SEMANTIWEB', 'rating', 'source',
+    'verbatim_content', 'sampling',
+    'attribute_Efficiency', 'attribute_Packaging', 'attribute_Price', 'attribute_Quality', 'attribute_Scent',
+    'attribute_Taste', 'attribute_Texture', 'attribute_Safety', 'attribute_Composition',
+    'categorie interne', 'sous categorie interne', 'photo',
+]
+
+
 def postprocess_reviews(df):
-    """Fonction de postprocessing des reviews"""
+    """Fonction de postprocessing des reviews : renvoie exactement les colonnes PLAT_COLUMNS, dans cet ordre."""
     if df.empty:
         return df
     
@@ -289,7 +301,7 @@ def postprocess_reviews(df):
     
     # Business indicator
     if 'business indicator' in df.columns:
-        df['Sampling'] = df['business indicator'].apply(lambda x: 1 if 'Sampling Rate' in str(x) else 0)
+        df['sampling'] = df['business indicator'].apply(lambda x: 1 if 'Sampling Rate' in str(x) else 0)
     
     # Supprimer les colonnes inutiles
     df = df.drop(columns=['content origin'], errors='ignore')
@@ -361,34 +373,9 @@ def postprocess_reviews(df):
         for attr in implicit_neutral_attrs:
             df.at[idx, attribute_columns[attr]] = 'neutre'
     
-    # Colonne safety spéciale
-    df['safety'] = '0'
-    for idx in all_attributes_by_row:
-        pos_attrs = pos_attributes_by_row[idx]
-        neg_attrs = neg_attributes_by_row[idx]
-        all_attrs = all_attributes_by_row[idx]
-        safety_attrs = {'Safety', 'Composition'}
-        safety_neutral = any(attr in (all_attrs - pos_attrs - neg_attrs) for attr in safety_attrs)
-        safety_positive = any(attr in pos_attrs for attr in safety_attrs)
-        safety_negative = any(attr in neg_attrs for attr in safety_attrs)
-        
-        if safety_positive and safety_negative:
-            df.at[idx, 'safety'] = 'neutre'
-        elif safety_positive:
-            df.at[idx, 'safety'] = 'positive'
-        elif safety_negative:
-            df.at[idx, 'safety'] = 'negative'
-        elif safety_neutral:
-            df.at[idx, 'safety'] = 'neutre'
-    
-    # Sélectionner les colonnes finales
-    original_columns = [col for col in df.columns if col not in ['attributes', 'attributes positive', 'attributes negative']]
-    original_columns = [col for col in original_columns if not col.startswith('attribute_')]
-    
-    final_columns = original_columns + list(attribute_columns.values()) + ['safety']
-    available_columns = [col for col in final_columns if col in df.columns]
-    
-    return df[available_columns]
+    # Colonnes finales : exactement PLAT_COLUMNS, dans cet ordre. Une colonne absente des données
+    # (ex. « categorie interne », que l'API ne fournit pas) est créée vide.
+    return df.reindex(columns=PLAT_COLUMNS)
 
 
 def display_quotas():
@@ -455,7 +442,8 @@ def display_download_buttons(df, filename_base, mode="page", page=None):
     # Excel (conditionnel)
     if EXCEL_AVAILABLE:
         with col2:
-            excel_data = create_excel_download(df)
+            # Excel au format plat (mêmes colonnes et même ordre que le fichier plat), demande du 26/11/2026
+            excel_data = create_excel_download(postprocess_reviews(df.copy()))
             if excel_data:
                 st.download_button(
                     "Télécharger l'Excel",
