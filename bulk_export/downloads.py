@@ -230,12 +230,10 @@ def _build_derived(conn, export_id: str, config: ExportConfig, storage: Storage,
         return ss.iter_mentions(conn, export_id)
 
     if "xlsx" in config.output_formats:
-        if not header:  # CSV non demandé : mêmes colonnes calculées sans écrire le CSV
-            header = list(dict.fromkeys(k for _, _, raw in mentions() for k in json.loads(raw)))
         total = sum(f.rows_count or 0 for f in records if f.kind == "batch_jsonl")
         dest = workdir / "export_complete.xlsx"
         try:
-            stats = derived.write_excel(mentions, dest, header, total)
+            stats = derived.write_excel(mentions, dest, total)
         except derived.ExcelTooLarge as exc:
             notes["xlsx"] = {"produced": False, "reason": str(exc)}
         else:
